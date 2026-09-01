@@ -31,6 +31,36 @@
         "kind": "news",
         "seconds": 60,
         "with_priority": 0
+      },
+      {
+        "kind": "nfl",
+        "seconds": 30,
+        "with_priority": 0
+      },
+      {
+        "kind": "nhl",
+        "seconds": 30,
+        "with_priority": 0
+      },
+      {
+        "kind": "nba",
+        "seconds": 30,
+        "with_priority": 0
+      },
+      {
+        "kind": "ncaaf",
+        "seconds": 30,
+        "with_priority": 0
+      },
+      {
+        "kind": "ncaab",
+        "seconds": 30,
+        "with_priority": 0
+      },
+      {
+        "kind": "epl",
+        "seconds": 30,
+        "with_priority": 0
       }
     ]
   },
@@ -63,7 +93,14 @@
       "NL Wild Card"
     ]
   },
-  "plugins": {},
+  "plugins": {
+    "nfl": {
+      "teams": ["Bills"]
+    },
+    "epl": {
+      "teams": ["Arsenal"]
+    }
+  },
   "time_format": "12h",
   "end_of_day": "00:00",
   "sync_delay_seconds": 0,
