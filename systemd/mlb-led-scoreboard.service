@@ -1,0 +1,15 @@
+[Unit]
+Description=MLB LED Scoreboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/program27/mlb-led-scoreboard
+ExecStart=/home/program27/mlb-led-scoreboard/venv/bin/python3 /home/program27/mlb-led-scoreboard/main.py --led-chain=1 --led-parallel=1 --led-gpio-mapping=adafruit-hat --led-cols=64 --led-rows=32
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
