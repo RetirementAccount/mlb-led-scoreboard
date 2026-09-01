@@ -25,42 +25,42 @@
       {
         "kind": "standings",
         "seconds": 60,
-        "with_priority": 0
+        "with_priority": [0, 1]
       },
       {
         "kind": "news",
         "seconds": 60,
-        "with_priority": 0
+        "with_priority": [0, 1]
       },
       {
         "kind": "nfl",
         "seconds": 30,
-        "with_priority": 0
+        "with_priority": [0, 1]
       },
       {
         "kind": "nhl",
         "seconds": 30,
-        "with_priority": 0
+        "with_priority": [0, 1]
       },
       {
         "kind": "nba",
         "seconds": 30,
-        "with_priority": 0
+        "with_priority": [0, 1]
       },
       {
         "kind": "ncaaf",
         "seconds": 30,
-        "with_priority": 0
+        "with_priority": [0, 1]
       },
       {
         "kind": "ncaab",
         "seconds": 30,
-        "with_priority": 0
+        "with_priority": [0, 1]
       },
       {
         "kind": "epl",
         "seconds": 30,
-        "with_priority": 0
+        "with_priority": [0, 1]
       }
     ]
   },
@@ -110,7 +110,7 @@
     "WBC",
     "WPBL"
   ],
-  "scrolling_speed": 2,
+  "scrolling_speed": 4,
   "editorial_blurb": true,
   "debug": false,
   "demo_date": false
