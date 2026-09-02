@@ -2,12 +2,14 @@
 """Listens for keypresses from a USB HID keypad (tested against a Rii i4, whose RF
 dongle identifies to Linux only as "Telink Wireless Receiver" -- device detection
 below is capability-based, not name-based, so it isn't tied to that specific string)
-and toggles LED scoreboard rotation categories live. Run as its own systemd service,
+and controls LED scoreboard rotation live. Run as its own systemd service,
 independent of the display process -- see systemd/mlb-led-keypad.service.
 
-Key mapping (number row):
+Key mapping:
   1 MLB   2 NFL   3 NHL   4 NBA   5 NCAAF   6 NCAAB   7 EPL   8 News   9 Standings
-  0 reset everything back on
+  0 reset every category back on
+  Up arrow    toggle pause (freezes whatever's currently showing, ignoring its timer)
+  Right arrow skip: end the current screen now, advance to the next -- works even while paused
 
 Requires the `evdev` package (Linux only -- see requirements.rpi.txt) and read access
 to /dev/input/event*, which is why this runs as root in its systemd unit.
@@ -18,6 +20,7 @@ import sys
 from evdev import InputDevice, categorize, ecodes, list_devices
 
 from bullpen.logging import LOGGER
+from data.rotation_control import RotationControl
 from data.rotation_toggles import RotationToggles
 
 # Unlike main.py, nothing here constructs a Config (which is what normally sets the
@@ -43,9 +46,11 @@ REQUIRED_KEYS = {
     ecodes.KEY_8,
     ecodes.KEY_9,
     ecodes.KEY_0,
+    ecodes.KEY_UP,
+    ecodes.KEY_RIGHT,
 }
 
-KEY_MAP = {
+TOGGLE_KEY_MAP = {
     ecodes.KEY_1: "game",
     ecodes.KEY_2: "nfl",
     ecodes.KEY_3: "nhl",
@@ -57,6 +62,8 @@ KEY_MAP = {
     ecodes.KEY_9: "standings",
 }
 RESET_KEY = ecodes.KEY_0
+PAUSE_KEY = ecodes.KEY_UP
+SKIP_KEY = ecodes.KEY_RIGHT
 
 
 def find_keyboard_device() -> "InputDevice | None":
@@ -71,13 +78,14 @@ def find_keyboard_device() -> "InputDevice | None":
 def main() -> None:
     device = find_keyboard_device()
     if device is None:
-        LOGGER.error("Could not find a keyboard device exposing keys 0-9. Available devices:")
+        LOGGER.error("Could not find a keyboard device exposing all the keys this script binds to. Available devices:")
         for path in list_devices():
             LOGGER.error("  %s: %s", path, InputDevice(path).name)
         sys.exit(1)
 
-    LOGGER.info("Listening for toggle keys on %s (%s)", device.name, device.path)
+    LOGGER.info("Listening for control keys on %s (%s)", device.name, device.path)
     toggles = RotationToggles()
+    control = RotationControl()
 
     for event in device.read_loop():
         if event.type != ecodes.EV_KEY:
@@ -90,8 +98,14 @@ def main() -> None:
         if event.code == RESET_KEY:
             toggles.reset_all()
             LOGGER.info("Rotation toggles reset: everything enabled")
-        elif event.code in KEY_MAP:
-            kind = KEY_MAP[event.code]
+        elif event.code == PAUSE_KEY:
+            paused = control.toggle_paused()
+            LOGGER.info("Rotation %s", "paused" if paused else "resumed")
+        elif event.code == SKIP_KEY:
+            control.request_skip()
+            LOGGER.info("Skip requested")
+        elif event.code in TOGGLE_KEY_MAP:
+            kind = TOGGLE_KEY_MAP[event.code]
             new_state = not toggles.is_enabled(kind)
             toggles.set_enabled(kind, new_state)
             LOGGER.info("Toggled %s -> %s", kind, "on" if new_state else "off")

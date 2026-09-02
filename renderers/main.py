@@ -46,7 +46,10 @@ class MainRenderer:
                     continue
                 if t := self.data.config.screen_time_at_priority(plugin, self.data.schedule.priority):
                     LOGGER.debug("Rotating to plugin %s for %d seconds", plugin, t)
-                    self.__draw_plugin_screen(plugin, any_of(timer_cond(t), self.scrolling_finished_cond()))
+                    cond = with_pause_and_skip(
+                        self.data.rotation_control, any_of(timer_cond(t), self.scrolling_finished_cond())
+                    )
+                    self.__draw_plugin_screen(plugin, cond)
                     drew_anything = True
 
             if not drew_anything:
@@ -70,9 +73,12 @@ class MainRenderer:
 
             LOGGER.debug("Render thread: showing game %d / %d", len(seen_games), self.data.schedule.num_games())
 
-            cond = any_of(
-                timer_cond(self.data.config.rotate_rate_for_status(game.status())),
-                self.scrolling_finished_cond(),
+            cond = with_pause_and_skip(
+                self.data.rotation_control,
+                any_of(
+                    timer_cond(self.data.config.rotate_rate_for_status(game.status())),
+                    self.scrolling_finished_cond(),
+                ),
             )
             while cond():
                 with frame_pacer(self.data.config.scrolling_speed):
@@ -237,6 +243,24 @@ def any_of(*conds) -> Callable[[], bool]:
 
     def cond():
         return any(c() for c in conds)
+
+    return cond
+
+
+def with_pause_and_skip(control, base_cond: Callable[[], bool]) -> Callable[[], bool]:
+    """Wrap a screen's display condition with live pause/skip control.
+
+    A skip request always wins immediately (even while paused), ending the current
+    screen right now. Otherwise, while paused the screen is held indefinitely --
+    base_cond (its normal timer/scroll-completion logic) is ignored entirely.
+    """
+
+    def cond():
+        if control.consume_skip():
+            return False
+        if control.is_paused():
+            return True
+        return base_cond()
 
     return cond
 
