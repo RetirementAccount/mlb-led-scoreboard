@@ -5,15 +5,9 @@ below is capability-based, not name-based, so it isn't tied to that specific str
 and toggles LED scoreboard rotation categories live. Run as its own systemd service,
 independent of the display process -- see systemd/mlb-led-keypad.service.
 
-Key mapping:
-  Q MLB   W NFL   3 NHL   4 NBA   5 NCAAF   6 NCAAB   7 EPL   8 News   9 Standings
+Key mapping (number row):
+  1 MLB   2 NFL   3 NHL   4 NBA   5 NCAAF   6 NCAAB   7 EPL   8 News   9 Standings
   0 reset everything back on
-
-(MLB/NFL use Q/W rather than 1/2 -- on the Rii i4 unit this was tested against, keys 1
-and 2 specifically never sent any event at all, on any of the keypad's four input
-nodes, across repeated tests, while every other key worked reliably. Root cause
-undiagnosed (dead keys on that unit vs. some layout quirk); rather than chase it
-further, MLB/NFL were just moved to two keys confirmed to work.)
 
 Requires the `evdev` package (Linux only -- see requirements.rpi.txt) and read access
 to /dev/input/event*, which is why this runs as root in its systemd unit.
@@ -39,8 +33,8 @@ LOGGER.setLevel(logging.INFO)
 # instead require the specific keys this script binds to actually be present
 # on the candidate device -- that's the one node that's really the keyboard.
 REQUIRED_KEYS = {
-    ecodes.KEY_Q,
-    ecodes.KEY_W,
+    ecodes.KEY_1,
+    ecodes.KEY_2,
     ecodes.KEY_3,
     ecodes.KEY_4,
     ecodes.KEY_5,
@@ -52,8 +46,8 @@ REQUIRED_KEYS = {
 }
 
 KEY_MAP = {
-    ecodes.KEY_Q: "game",
-    ecodes.KEY_W: "nfl",
+    ecodes.KEY_1: "game",
+    ecodes.KEY_2: "nfl",
     ecodes.KEY_3: "nhl",
     ecodes.KEY_4: "nba",
     ecodes.KEY_5: "ncaaf",
