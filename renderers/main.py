@@ -21,6 +21,8 @@ from renderers.games import postgame as postgamerender
 from renderers.games import pregame as pregamerender
 from renderers.games import teams
 
+CONTROL_POLL_INTERVAL = 0.05  # seconds -- see __draw_plugin_screen
+
 
 class MainRenderer:
     def __init__(self, matrix, data: Data, plugins: dict[str, api.PluginRenderer]) -> None:
@@ -179,17 +181,27 @@ class MainRenderer:
         renderer = self.plugins[plugin_name]
         data = self.data.plugin_data[plugin_name]
         wait_time = renderer.wait_time()
+        # cond() (which checks for a pending pause/skip) is polled at CONTROL_POLL_INTERVAL,
+        # independent of wait_time -- actual rendering still only happens every wait_time
+        # seconds. Without this split, a plugin with a long wait_time (e.g. the espn_sports
+        # plugins at 4s) would only notice a skip once every wait_time seconds, silently
+        # dropping any extra rapid presses that landed in between (reported as rapid skip
+        # presses seeming to "reset" the screen instead of advancing once per press).
+        next_render_time = 0.0
         while renderer.can_render(data) and cond():
-            with frame_pacer(wait_time):
-                pos = renderer.render(data, self.canvas, graphics, self.scrolling_text_pos)
-                self.__update_scrolling_text_pos(pos, self.canvas.width)
+            now = time.monotonic()
+            if now < next_render_time:
+                time.sleep(min(CONTROL_POLL_INTERVAL, next_render_time - now))
+                continue
+            next_render_time = now + wait_time
 
-                # Show network issues
-                if self.data.network_issues:
-                    network.render_network_error(
-                        self.canvas, self.data.config.layout, self.data.config.scoreboard_colors
-                    )
-                self.canvas = self.matrix.SwapOnVSync(self.canvas)
+            pos = renderer.render(data, self.canvas, graphics, self.scrolling_text_pos)
+            self.__update_scrolling_text_pos(pos, self.canvas.width)
+
+            # Show network issues
+            if self.data.network_issues:
+                network.render_network_error(self.canvas, self.data.config.layout, self.data.config.scoreboard_colors)
+            self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
         renderer.reset()
 
