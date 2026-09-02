@@ -82,24 +82,19 @@ class MainRenderer:
                 # reliably walks through every game -- this is the one legitimate reason a
                 # skip-driven advance is allowed to have real latency, bounded so it can't
                 # hang indefinitely if something else is actually wrong.
-                LOGGER.info("[diag] Stale repeat (%s), waiting for next game", game.game_id)
                 game = self.__wait_for_next_game(seen_games)
                 if game is None:
-                    LOGGER.info("[diag] Wait timed out, moving on to plugins")
+                    LOGGER.warning("Render thread: data thread didn't catch up in time, moving on")
                     break
-                LOGGER.info("[diag] Wait succeeded, got new game: %s", game.game_id)
                 # Any extra skip presses that landed during the wait above are treated as
                 # already satisfied by it -- otherwise this freshly-found game would be
                 # skipped again instantly (before ever being shown), forcing another wait,
                 # and enough of those in a row could exhaust the wait's own timeout and
                 # fall through to plugins despite games still being available.
-                drained = self.data.rotation_control.consume_skip()
-                LOGGER.info("[diag] Drained pending skip after wait: %s", drained)
+                self.data.rotation_control.consume_skip()
             seen_games.add(game.game_id)
 
-            LOGGER.info(
-                "[diag] Entering game %d / %d: %s", len(seen_games), self.data.schedule.num_games(), game.game_id
-            )
+            LOGGER.debug("Render thread: showing game %d / %d", len(seen_games), self.data.schedule.num_games())
 
             cond = with_pause_and_skip(
                 self.data.rotation_control,
@@ -306,7 +301,7 @@ def with_pause_and_skip(control, base_cond: Callable[[], bool]) -> Callable[[], 
 
     def cond():
         if control.consume_skip():
-            LOGGER.info("[diag] Skip consumed, ending current screen")
+            LOGGER.debug("Skip consumed, ending current screen")
             return False
         if control.is_paused():
             return True
