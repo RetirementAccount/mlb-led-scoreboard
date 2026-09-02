@@ -86,6 +86,12 @@ class MainRenderer:
                 if game is None:
                     LOGGER.warning("Render thread: data thread didn't catch up in time, moving on")
                     break
+                # Any extra skip presses that landed during the wait above are treated as
+                # already satisfied by it -- otherwise this freshly-found game would be
+                # skipped again instantly (before ever being shown), forcing another wait,
+                # and enough of those in a row could exhaust the wait's own timeout and
+                # fall through to plugins despite games still being available.
+                self.data.rotation_control.consume_skip()
             seen_games.add(game.game_id)
 
             LOGGER.debug("Render thread: showing game %d / %d", len(seen_games), self.data.schedule.num_games())
