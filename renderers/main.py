@@ -73,7 +73,9 @@ class MainRenderer:
                 break
             seen_games.add(game.game_id)
 
-            LOGGER.debug("Render thread: showing game %d / %d", len(seen_games), self.data.schedule.num_games())
+            LOGGER.info(
+                "[diag] Entering game %d / %d: %s", len(seen_games), self.data.schedule.num_games(), game.game_id
+            )
 
             cond = with_pause_and_skip(
                 self.data.rotation_control,
@@ -84,8 +86,12 @@ class MainRenderer:
             )
             while cond():
                 with frame_pacer(self.data.config.scrolling_speed):
+                    frame_start = time.monotonic()
                     self.data.config.layout.state_for_game(game)
                     self.__draw_game(game)
+                    frame_elapsed = time.monotonic() - frame_start
+                    if frame_elapsed > 0.2:
+                        LOGGER.info("[diag] __draw_game took %.3fs", frame_elapsed)
 
     # Draws the provided game on the canvas
     def __draw_game(self, game: Game):
@@ -269,7 +275,7 @@ def with_pause_and_skip(control, base_cond: Callable[[], bool]) -> Callable[[], 
 
     def cond():
         if control.consume_skip():
-            LOGGER.debug("Skip consumed, ending current screen")
+            LOGGER.info("[diag] Skip consumed, ending current screen")
             return False
         if control.is_paused():
             return True
