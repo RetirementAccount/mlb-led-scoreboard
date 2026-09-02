@@ -71,11 +71,20 @@ class MainRenderer:
 
             if len(seen_games) >= self.data.schedule.num_games():
                 break
+
+            if game.game_id in seen_games:
+                # self.data.games is a DoubleBuffer filled by the separate data-fetching
+                # thread, which only prepares a genuinely new "next" game roughly once per
+                # main-loop refresh cycle (~0.5-1s) -- see data/utils/double_buffer.py.
+                # If skip is pressed faster than that, .next() just returns the same game
+                # again since a new one isn't ready yet. Rather than spin showing the same
+                # game repeatedly, move on to whatever's next in the rotation (plugins);
+                # __render_games will pick up the remaining games next time it runs, by
+                # which point the data thread has caught up.
+                break
             seen_games.add(game.game_id)
 
-            LOGGER.info(
-                "[diag] Entering game %d / %d: %s", len(seen_games), self.data.schedule.num_games(), game.game_id
-            )
+            LOGGER.debug("Render thread: showing game %d / %d", len(seen_games), self.data.schedule.num_games())
 
             cond = with_pause_and_skip(
                 self.data.rotation_control,
@@ -86,12 +95,8 @@ class MainRenderer:
             )
             while cond():
                 with frame_pacer(self.data.config.scrolling_speed):
-                    frame_start = time.monotonic()
                     self.data.config.layout.state_for_game(game)
                     self.__draw_game(game)
-                    frame_elapsed = time.monotonic() - frame_start
-                    if frame_elapsed > 0.2:
-                        LOGGER.info("[diag] __draw_game took %.3fs", frame_elapsed)
 
     # Draws the provided game on the canvas
     def __draw_game(self, game: Game):
@@ -275,7 +280,7 @@ def with_pause_and_skip(control, base_cond: Callable[[], bool]) -> Callable[[], 
 
     def cond():
         if control.consume_skip():
-            LOGGER.info("[diag] Skip consumed, ending current screen")
+            LOGGER.debug("Skip consumed, ending current screen")
             return False
         if control.is_paused():
             return True
