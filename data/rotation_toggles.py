@@ -32,7 +32,12 @@ class RotationToggles:
         return self._enabled.get(kind, True)
 
     def set_enabled(self, kind: str, enabled: bool) -> None:
-        self._maybe_reload()
+        # Always read fresh before mutating (not the throttled check used by is_enabled(),
+        # which is called from the display's tight render loop) -- this is a rare,
+        # human-triggered write, so there's no throttling benefit, only a correctness risk:
+        # writing from a stale cached read can clobber a concurrent change from the other
+        # process (keypad listener vs. display, or two quick keypresses).
+        self._load(force=True)
         self._enabled[kind] = enabled
         self._save()
 

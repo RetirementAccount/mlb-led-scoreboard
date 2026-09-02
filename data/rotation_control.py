@@ -6,7 +6,16 @@ from typing import Optional
 from bullpen.logging import LOGGER
 
 STATE_PATH = Path(__file__).parent.parent / "rotation_control.json"
-RELOAD_CHECK_INTERVAL = 0.5  # seconds -- checked more often than RotationToggles, so pause/skip feel responsive
+# How often is_paused()/consume_skip() (called every render frame, up to ~20x/sec during
+# MLB game scrolling) re-check the file for external changes. stat() is cheap, so this can
+# be short -- it directly bounds how long a skip/pause from another process takes to be
+# noticed. Write methods (set_paused, request_skip, ...) always force a fresh read before
+# mutating regardless of this interval: they're rare, human-triggered actions, not called
+# in a tight loop, so there's no throttling benefit -- only a correctness risk, since a
+# write based on stale cached state can silently clobber a concurrent change from the
+# other process (this was the cause of "pressing skip twice quickly re-shows the same
+# screen instead of advancing twice").
+RELOAD_CHECK_INTERVAL = 0.1
 
 
 class RotationControl:
@@ -31,18 +40,18 @@ class RotationControl:
         return self._paused
 
     def set_paused(self, paused: bool) -> None:
-        self._maybe_reload()
+        self._load(force=True)
         self._paused = paused
         self._save()
 
     def toggle_paused(self) -> bool:
-        self._maybe_reload()
+        self._load(force=True)
         self._paused = not self._paused
         self._save()
         return self._paused
 
     def request_skip(self) -> None:
-        self._maybe_reload()
+        self._load(force=True)
         self._skip = True
         self._save()
 
