@@ -35,14 +35,21 @@ A wall-mounted (eventually desk-optional) LED matrix sports ticker that rotates 
   - OpenWeatherMap API key (currently invalid/placeholder, throws a warning, weather screen non-functional until set — free key from home.openweathermap.org)
   - `colors/teams.json`, `colors/scoreboard.json`, `coordinates/w32h32.json` — all currently missing, falling back to defaults (may be fine, may want customizing later for the diffusion-acrylic-adjusted look)
 
-## Known good SSH workflow
+## Display now runs as a systemd service (persistent, auto-start)
 
-```
-ssh program27@razpi5one
-cd ~/mlb-led-scoreboard
-sudo ./main.py --led-chain=1 --led-parallel=1 --led-gpio-mapping=adafruit-hat --led-cols=64 --led-rows=32
-```
-(Ctrl+C to stop.) Note: dropped VPN connections will kill the SSH session and any foreground process running in it — this is expected, not a Pi problem. A systemd auto-start service (not yet built) would make the display persist independent of SSH sessions and survive drops/reboots.
+As of 2026-09-02, the display is managed by systemd rather than hand-launched over SSH — it survives SSH drops and reboots, and restarts itself on failure (`Restart=on-failure`).
+
+- Unit file lives in the repo at `systemd/mlb-led-scoreboard.service` and is installed at `/etc/systemd/system/mlb-led-scoreboard.service` on the Pi (copy, don't symlink, since `/etc` isn't inside the git-tracked working tree). If the run command ever changes (e.g. `--led-chain=2` once the second panel is wired in), edit the repo copy, `git pull` on the Pi, then re-copy it into place and `sudo systemctl daemon-reload && sudo systemctl restart mlb-led-scoreboard.service`.
+- Runs as `User=root` in the unit (same reason the manual command needed `sudo`: the LED matrix library needs root for GPIO).
+- Useful commands on the Pi:
+  ```
+  systemctl status mlb-led-scoreboard.service   # no sudo needed to view
+  sudo systemctl restart mlb-led-scoreboard.service
+  sudo systemctl stop mlb-led-scoreboard.service
+  journalctl -u mlb-led-scoreboard.service -f   # tail logs (may need sudo depending on journald ACLs)
+  ```
+- A narrowly-scoped passwordless sudo rule (`/etc/sudoers.d/mlb-led-scoreboard`, exactly `/home/program27/mlb-led-scoreboard/main.py *`) still exists from before the systemd switch. It's no longer needed for normal operation now that systemd handles starting the process as root itself, but was left in place rather than removed since it's harmless and narrowly scoped.
+- Ad-hoc SSH login for anything else still works the same way: `ssh program27@razpi5one.local` (note: the plain `razpi5one` hostname doesn't resolve via normal DNS from a dev machine, only the mDNS `.local` form does — see gotchas below).
 
 ## Rotation controller — already built (discovered, not written from scratch)
 
@@ -72,6 +79,7 @@ Built `espn_sports/` (`mlb-led-scoreboard-espn-sports` package) — one shared p
 - Several `*.egg-info` and `build/` directories under `bullpen/`, `standings/`, and `news/` were **root-owned**, left over from an earlier `sudo pip install`. This broke `pip install -r requirements.txt` with "Cannot update time stamp" / "Permission denied" errors on build. Fixed with `sudo chown -R program27:program27 ~/mlb-led-scoreboard`. Lesson: never `sudo pip install` in this project — only `sudo` the final `./main.py` run, since the LED library needs root for GPIO but nothing else should.
 - Added a narrowly-scoped passwordless sudo rule (`/etc/sudoers.d/mlb-led-scoreboard`) for exactly `/home/program27/mlb-led-scoreboard/main.py *`, so the display can be launched/relaunched over SSH without an interactive password prompt. Stopping it still requires an interactive `sudo pkill -f mlb-led-scoreboard/main.py` (deliberately not covered by the NOPASSWD rule, to keep it narrow) — and `pkill -f` should always be run interactively, not as part of a larger compound SSH command string, since `-f` matches against the full command line and will self-match (and kill) the invoking shell if the pattern text appears in that larger string.
 - The Pi answers to `razpi5one.local` (mDNS) reliably; plain `razpi5one` doesn't resolve via normal DNS from a dev machine. mDNS resolution has been intermittently flaky (occasional transient "could not resolve hostname" on an otherwise-working connection) — just retry.
+- **Long multi-line commands pasted into Eric's terminal get corrupted** — a `nano`/`visudo` paste containing a literal `^X` (meant as a keystroke, not text) landed as text in the file; a multi-line heredoc silently did nothing; a long single-line base64 string got line-wrapped with stray inserted/dropped characters. Root cause looks like visual line-wrapping (from wherever the text is copied) getting preserved as literal characters on paste, rather than anything Pi/SSH-specific. Workaround that worked: get file content onto the Pi via `git commit` + `git pull` instead of terminal paste, then only ask Eric to run short single-line commands (well under ~80 chars) to move it into place with `sudo`.
 
 ## Next steps (in rough priority order, per Eric's direction)
 
@@ -79,9 +87,10 @@ Built `espn_sports/` (`mlb-led-scoreboard-espn-sports` package) — one shared p
 2. **Custom logo creation** (if/when needed beyond what's bundled) — not a file-type problem, PNG w/ transparency is fine from any tool (Aseprite, Photoshop, etc.); the actual constraint is pixel-art skill at very low resolution (logos read at roughly 16-24px within the canvas). Avoid auto-downscaled vector/gradient art — design pixel-by-pixel or hand-clean instead.
 3. **Mode-switching input** — Stream Deck (USB HID device, Python lib `python-elgato-streamdeck`) or a cheap USB macro pad (shows up as a standard keyboard) as a physical way to flip the "current mode" variable, running as a separate thread/process alongside the render loop. Not wired to GPIO — plain USB. With the rotation controller now understood to be config/priority driven, this would most likely work by having the input listener rewrite/reload the active priority level rather than needing a new dispatch mechanism.
 4. **Crypto/Kalshi ticker mode** — still not started; would be its own `bullpen` plugin following the same pattern as the new sports plugins.
-5. **systemd auto-start service** — the display is currently started manually over SSH for testing (backgrounded via `nohup`/`disown`), not persistent across reboots yet. Worth doing soon now that the base rotation is confirmed working, rather than continuing to hand-launch it each session.
-6. **Second panel** — deferred by choice. Needs the barrel-jack-to-screw-terminal adapter (or checking whether one shipped with the panels already) before wiring in.
-7. **Diffusion acrylic + physical mounting** — deferred by choice, planned for after software is further along.
+5. **Second panel** — deferred by choice. Needs the barrel-jack-to-screw-terminal adapter (or checking whether one shipped with the panels already) before wiring in.
+6. **Diffusion acrylic + physical mounting** — deferred by choice, planned for after software is further along.
+
+Done as of 2026-09-02: display is now a persistent systemd service (see below) rather than hand-launched over SSH.
 
 ## Working conventions to carry over
 
