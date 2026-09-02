@@ -17,7 +17,25 @@ from evdev import InputDevice, categorize, ecodes, list_devices
 from bullpen.logging import LOGGER
 from data.rotation_toggles import RotationToggles
 
-DEVICE_NAME_HINT = "Rii"
+# A cheap wireless keypad's RF dongle commonly exposes several separate event
+# nodes under its chipset vendor's name (e.g. "Telink Wireless Receiver") rather
+# than the keypad's own brand name -- one for the keyboard, one for the
+# mouse/touchpad, one for consumer-control media keys, one for system-control
+# power keys. Matching by name is unreliable across different keypads, so
+# instead require the specific keys this script binds to actually be present
+# on the candidate device -- that's the one node that's really the keyboard.
+REQUIRED_KEYS = {
+    ecodes.KEY_0,
+    ecodes.KEY_1,
+    ecodes.KEY_2,
+    ecodes.KEY_3,
+    ecodes.KEY_4,
+    ecodes.KEY_5,
+    ecodes.KEY_6,
+    ecodes.KEY_7,
+    ecodes.KEY_8,
+    ecodes.KEY_9,
+}
 
 KEY_MAP = {
     ecodes.KEY_1: "game",
@@ -36,7 +54,8 @@ RESET_KEY = ecodes.KEY_0
 def find_keyboard_device() -> "InputDevice | None":
     for path in list_devices():
         device = InputDevice(path)
-        if DEVICE_NAME_HINT.lower() in device.name.lower() and ecodes.EV_KEY in device.capabilities():
+        keys = set(device.capabilities().get(ecodes.EV_KEY, []))
+        if REQUIRED_KEYS.issubset(keys):
             return device
     return None
 
@@ -44,7 +63,7 @@ def find_keyboard_device() -> "InputDevice | None":
 def main() -> None:
     device = find_keyboard_device()
     if device is None:
-        LOGGER.error("Could not find a keyboard device matching '%s'. Available devices:", DEVICE_NAME_HINT)
+        LOGGER.error("Could not find a keyboard device exposing keys 0-9. Available devices:")
         for path in list_devices():
             LOGGER.error("  %s: %s", path, InputDevice(path).name)
         sys.exit(1)
