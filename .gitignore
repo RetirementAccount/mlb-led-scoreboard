@@ -112,6 +112,9 @@ venv.bak/
 /config*.json
 emulator_config.json
 
+# Ignore live rotation toggle state (runtime, not source)
+/rotation_toggles.json
+
 # Ignore any customized coordinate configs
 coordinates/*.json
 

@@ -1,0 +1,14 @@
+[Unit]
+Description=MLB LED Scoreboard Keypad Listener
+After=multi-user.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/program27/mlb-led-scoreboard
+ExecStart=/home/program27/mlb-led-scoreboard/venv/bin/python3 /home/program27/mlb-led-scoreboard/keypad_listener.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -35,13 +35,23 @@ class MainRenderer:
 
     def render(self) -> NoReturn:
         while True:
-            if self.data.schedule.num_games() > 0:
+            drew_anything = False
+
+            if self.data.schedule.num_games() > 0 and self.data.rotation_toggles.is_enabled("game"):
                 self.__render_games()
+                drew_anything = True
 
             for plugin in self.data.config.rotation_screen_rules.get(self.data.schedule.priority, {}):
+                if not self.data.rotation_toggles.is_enabled(plugin):
+                    continue
                 if t := self.data.config.screen_time_at_priority(plugin, self.data.schedule.priority):
                     LOGGER.debug("Rotating to plugin %s for %d seconds", plugin, t)
                     self.__draw_plugin_screen(plugin, any_of(timer_cond(t), self.scrolling_finished_cond()))
+                    drew_anything = True
+
+            if not drew_anything:
+                # Everything toggled off -- avoid busy-spinning until something is re-enabled.
+                time.sleep(0.5)
 
     def __render_games(self):
         seen_games = set()

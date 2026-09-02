@@ -1,1 +1,2 @@
 git+https://github.com/hzeller/rpi-rgb-led-matrix@41809e4
+evdev>=1.7.1

@@ -2,6 +2,7 @@ from bullpen.api import UpdateStatus, PluginData
 from bullpen.logging import LOGGER
 from data.config import Config
 
+from data.rotation_toggles import RotationToggles
 from data.schedule import Schedule
 from data.utils.double_buffer import DoubleBuffer
 
@@ -12,6 +13,7 @@ class Data:
         self.config: Config = config
         self.network_issues: bool = False
         self.plugin_data = plugin_data
+        self.rotation_toggles = RotationToggles()
 
         # get schedule
         self.schedule: Schedule = Schedule(config)

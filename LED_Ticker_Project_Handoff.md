@@ -84,12 +84,25 @@ Built `espn_sports/` (`mlb-led-scoreboard-espn-sports` package) — one shared p
 
 ## Next steps (in rough priority order, per Eric's direction)
 
-1. **Mode-switching input** — Stream Deck (USB HID device, Python lib `python-elgato-streamdeck`) or a cheap USB macro pad (shows up as a standard keyboard) as a physical way to flip the "current mode" variable, running as a separate thread/process alongside the render loop. Not wired to GPIO — plain USB. With the rotation controller now understood to be config/priority driven, this would most likely work by having the input listener rewrite/reload the active priority level rather than needing a new dispatch mechanism.
-2. **Crypto/Kalshi ticker mode** — still not started; would be its own `bullpen` plugin following the same pattern as the new sports plugins.
+1. **Wire up and test the keypad listener on real hardware** — code is written (see "Rotation toggles + keypad control" below) but Eric's Rii i4 keypad hasn't been plugged into the Pi yet, so none of it has been verified against the real device. First things to check once it's plugged in: does `evdev.list_devices()` actually find it (its 2.4GHz RF dongle may expose separate keyboard/touchpad event nodes — the `DEVICE_NAME_HINT = "Rii"` match in `keypad_listener.py` might grab the wrong one), and does reading `/dev/input/event*` actually work when the listener runs unprivileged vs. as root.
+2. **Crypto/Kalshi ticker mode** — still not started; would be its own `bullpen` plugin following the same pattern as the new sports plugins. Once built, add `"crypto"` (or similar) to `data/rotation_toggles.py`'s `ALL_KINDS` and give it a keypad key.
 3. **Second panel** — deferred by choice. Needs the barrel-jack-to-screw-terminal adapter (or checking whether one shipped with the panels already) before wiring in.
 4. **Physical mounting** — deferred by choice, planned for after software is further along. Backing board + acrylic install (acrylic now ordered — see Hardware section).
 
-Done as of 2026-09-02: display is now a persistent systemd service (see below) rather than hand-launched over SSH. Team colors added to the sports plugins (see below).
+Done as of 2026-09-02: display is now a persistent systemd service (see below) rather than hand-launched over SSH. Team colors added to the sports plugins (see below). Rotation toggle mechanism + keypad listener code written (see below) — not yet hardware-tested.
+
+## Rotation toggles + keypad control (2026-09-02, untested on real hardware)
+
+Eric wants per-category on/off control at runtime (e.g. "just MLB", "just NHL+NBA", "just crypto") without editing `config.json` and restarting. Built:
+
+- **`data/rotation_toggles.py`** — a `RotationToggles` class backed by a small JSON file (`rotation_toggles.json`, gitignored, lives at repo root next to `config.json`) tracking on/off per category: `game` (MLB — previously not gate-able at all, since `MainRenderer.__render_games()` ran unconditionally whenever `num_games() > 0`), plus `news`, `standings`, and all six sports plugin kinds. Unknown/future kinds default to enabled. A running process re-reads the file every ~2 seconds (cheap `stat()` check, no restart needed) so external changes take effect live.
+- **`renderers/main.py`**'s rotation loop (`MainRenderer.render()`) now checks `self.data.rotation_toggles.is_enabled(...)` before rendering MLB games or any plugin screen. Added a fallback `time.sleep(0.5)` when everything is toggled off, to avoid busy-spinning the render thread on nothing.
+- **`toggle_rotation.py`** — a CLI usable right now over SSH: `./toggle_rotation.py nhl off`, `./toggle_rotation.py --reset`, or no args to print current state of everything. This is the same underlying call the keypad listener uses — building this first meant the toggle mechanism itself is fully tested (`tests/test_rotation_toggles.py`) independent of the physical keypad.
+- **`keypad_listener.py`** + **`systemd/mlb-led-keypad.service`** — a separate systemd service (independent from the display service, so either can restart without the other) that listens for keypresses via `evdev` and calls the same toggle mechanism. Number keys `1`-`9` map to `game`/`nfl`/`nhl`/`nba`/`ncaaf`/`ncaab`/`epl`/`news`/`standings` respectively; `0` resets everything back on. Requires `evdev` (added to `requirements.rpi.txt` only — it's Linux-only and would break `pip install` on Eric's Windows dev machine if it were in the main `requirements.txt`).
+
+**Chosen over a Stream Deck**: Eric has a Rii i4 (wireless mini keyboard/touchpad combo) already, not a Stream Deck. Its 2.4GHz RF dongle enumerates as a standard HID keyboard, so `evdev` works directly with no vendor SDK — actually simpler than Stream Deck integration would have been (no per-key icon/LCD handling needed, since the LED matrix itself is the only feedback surface that matters here).
+
+**Not yet verified**: none of `keypad_listener.py` has been tested against the real Rii i4, since it's still on Eric's desk, not plugged into the Pi. Known risk going in: the Rii's dongle likely exposes multiple input event nodes (one for the keyboard side, one for the touchpad/mouse side) that could both match on `"rii"` in the device name — `find_keyboard_device()` picks the first `EV_KEY`-capable match, which may or may not be the right one in practice. Once plugged in, check `cat /proc/bus/input/devices` on the Pi to see exactly what nodes show up before trusting the auto-detection.
 
 ## Team colors + logo experiment (2026-09-02)
 
