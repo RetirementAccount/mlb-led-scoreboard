@@ -75,13 +75,17 @@ class MainRenderer:
             if game.game_id in seen_games:
                 # self.data.games is a DoubleBuffer filled by the separate data-fetching
                 # thread, which only prepares a genuinely new "next" game roughly once per
-                # main-loop refresh cycle (~0.5-1s) -- see data/utils/double_buffer.py.
-                # If skip is pressed faster than that, .next() just returns the same game
-                # again since a new one isn't ready yet. Rather than spin showing the same
-                # game repeatedly, move on to whatever's next in the rotation (plugins);
-                # __render_games will pick up the remaining games next time it runs, by
-                # which point the data thread has caught up.
-                break
+                # main-loop refresh cycle (~0.5-1s) -- see data/utils/double_buffer.py. If
+                # skip is pressed faster than that, .next() just returns the same game
+                # again since a new one isn't ready yet. Rather than show it again (or give
+                # up on MLB entirely), wait briefly for the data thread to catch up so skip
+                # reliably walks through every game -- this is the one legitimate reason a
+                # skip-driven advance is allowed to have real latency, bounded so it can't
+                # hang indefinitely if something else is actually wrong.
+                game = self.__wait_for_next_game(seen_games)
+                if game is None:
+                    LOGGER.warning("Render thread: data thread didn't catch up in time, moving on")
+                    break
             seen_games.add(game.game_id)
 
             LOGGER.debug("Render thread: showing game %d / %d", len(seen_games), self.data.schedule.num_games())
@@ -97,6 +101,17 @@ class MainRenderer:
                 with frame_pacer(self.data.config.scrolling_speed):
                     self.data.config.layout.state_for_game(game)
                     self.__draw_game(game)
+
+    def __wait_for_next_game(self, seen_games: set, timeout: float = 2.0, poll_interval: float = 0.1):
+        """Poll self.data.games.next() until it hands back a game not already in
+        seen_games, or give up after timeout seconds (returning None)."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            time.sleep(poll_interval)
+            game = self.data.games.next()
+            if game is not None and game.game_id not in seen_games:
+                return game
+        return None
 
     # Draws the provided game on the canvas
     def __draw_game(self, game: Game):
