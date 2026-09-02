@@ -25,6 +25,7 @@ wheels/
 *.egg
 MANIFEST
 venv/
+espn_sports/src/mlb_led_scoreboard_espn_sports/_logo_cache/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

@@ -1,6 +1,7 @@
 import bullpen.api as api
 
 DEFAULT_REFRESH_SECONDS = 60
+DEFAULT_LOGO_SIZE = 12
 
 
 class ConfigBase(api.PluginConfig):
@@ -27,6 +28,8 @@ class ConfigBase(api.PluginConfig):
             teams = [teams]
         self.favorite_teams_lower = [t.lower() for t in teams]
         self.refresh_seconds = plugin_config.get("refresh_seconds", DEFAULT_REFRESH_SECONDS)
+        self.show_logos = bool(plugin_config.get("show_logos", False))
+        self.logo_size = plugin_config.get("logo_size", DEFAULT_LOGO_SIZE)
 
 
 class NFLConfig(ConfigBase):

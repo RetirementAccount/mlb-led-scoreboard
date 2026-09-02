@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "mlb-led-scoreboard-espn-sports"
 version = "0.1.0"
 description = "NFL/NHL/NBA/NCAAF/NCAAB/EPL scoreboard plugins backed by ESPN's public scoreboard API"
+dependencies = ["Pillow>=10.0.1,<12.0.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 
 @dataclass(frozen=True)
@@ -7,6 +7,9 @@ class TeamScore:
     abbreviation: str
     display_name: str
     score: str
+    color: Optional[str] = None
+    alternate_color: Optional[str] = None
+    logo_url: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -64,4 +67,7 @@ def _team_score(competitor: dict[str, Any]) -> TeamScore:
         abbreviation=team.get("abbreviation", "???"),
         display_name=team.get("displayName", team.get("shortDisplayName", "")),
         score=competitor.get("score", "0"),
+        color=team.get("color"),
+        alternate_color=team.get("alternateColor"),
+        logo_url=team.get("logo"),
     )

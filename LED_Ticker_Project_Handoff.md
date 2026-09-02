@@ -83,14 +83,20 @@ Built `espn_sports/` (`mlb-led-scoreboard-espn-sports` package) — one shared p
 
 ## Next steps (in rough priority order, per Eric's direction)
 
-1. **Team colors/logos for the new sports plugins** — currently text-only. Bundled MLB team logos already exist in this repo; the new leagues have none yet.
-2. **Custom logo creation** (if/when needed beyond what's bundled) — not a file-type problem, PNG w/ transparency is fine from any tool (Aseprite, Photoshop, etc.); the actual constraint is pixel-art skill at very low resolution (logos read at roughly 16-24px within the canvas). Avoid auto-downscaled vector/gradient art — design pixel-by-pixel or hand-clean instead.
-3. **Mode-switching input** — Stream Deck (USB HID device, Python lib `python-elgato-streamdeck`) or a cheap USB macro pad (shows up as a standard keyboard) as a physical way to flip the "current mode" variable, running as a separate thread/process alongside the render loop. Not wired to GPIO — plain USB. With the rotation controller now understood to be config/priority driven, this would most likely work by having the input listener rewrite/reload the active priority level rather than needing a new dispatch mechanism.
-4. **Crypto/Kalshi ticker mode** — still not started; would be its own `bullpen` plugin following the same pattern as the new sports plugins.
-5. **Second panel** — deferred by choice. Needs the barrel-jack-to-screw-terminal adapter (or checking whether one shipped with the panels already) before wiring in.
-6. **Diffusion acrylic + physical mounting** — deferred by choice, planned for after software is further along.
+1. **Custom logo creation, by hand** — auto-downloaded ESPN logos confirmed unusable (see below); a bundled MLB-style approach would need hand-drawn/hand-cleaned pixel art per team, which is real per-team effort, not a quick win. Not a file-type problem, PNG w/ transparency is fine from any tool (Aseprite, Photoshop, etc.); the actual constraint is pixel-art skill at very low resolution (logos read at roughly 16-24px within the canvas). Avoid auto-downscaled vector/gradient art — design pixel-by-pixel or hand-clean instead.
+2. **Mode-switching input** — Stream Deck (USB HID device, Python lib `python-elgato-streamdeck`) or a cheap USB macro pad (shows up as a standard keyboard) as a physical way to flip the "current mode" variable, running as a separate thread/process alongside the render loop. Not wired to GPIO — plain USB. With the rotation controller now understood to be config/priority driven, this would most likely work by having the input listener rewrite/reload the active priority level rather than needing a new dispatch mechanism.
+3. **Crypto/Kalshi ticker mode** — still not started; would be its own `bullpen` plugin following the same pattern as the new sports plugins.
+4. **Second panel** — deferred by choice. Needs the barrel-jack-to-screw-terminal adapter (or checking whether one shipped with the panels already) before wiring in.
+5. **Diffusion acrylic + physical mounting** — deferred by choice, planned for after software is further along.
 
-Done as of 2026-09-02: display is now a persistent systemd service (see below) rather than hand-launched over SSH.
+Done as of 2026-09-02: display is now a persistent systemd service (see below) rather than hand-launched over SSH. Team colors added to the sports plugins (see below).
+
+## Team colors + logo experiment (2026-09-02)
+
+Added real per-team colors to `espn_sports`, and tried (then shelved) auto-downloaded logos:
+
+- **Colors**: ESPN's scoreboard JSON already includes each team's `color`/`alternateColor` hex values (no separate lookup table needed — works uniformly across all six leagues, including hundreds of NCAA teams with zero extra maintenance). `espn_sports/src/mlb_led_scoreboard_espn_sports/colors.py` picks the team's own color for its abbreviation/score text, falling back to the alternate color (then plain white) when the primary color is too dark to read against the black background (luminance threshold). Shipped and live on the Pi.
+- **Logos**: ESPN also provides a direct logo PNG URL per team (`team.logo` in the JSON). Built fetch+disk-cache+downscale support (`logos.py`, wired into `Data.update()` on the background thread so it never blocks rendering) behind a `show_logos` config flag, default **off**. Tested against a real logo (Seahawks) at 12px, 16px, and 24px — even at 24px (75% of the panel's 32px height) the fine linework and thin outlines collapse into an unrecognizable blob. This is inherent to downscaling a detailed vector logo, not a size-tuning problem, and confirms the pixel-art guidance already in this doc. Auto-fetch logos are **not recommended** as-is; the code is left in place (opt-in via `"plugins": {"nfl": {"show_logos": true}}`) in case hand-cleaned pixel-art assets get made later per-team, per item 1 above.
 
 ## Working conventions to carry over
 
