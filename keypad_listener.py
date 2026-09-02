@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Listens for keypresses from a USB HID keypad (e.g. Rii i4) and toggles
-LED scoreboard rotation categories live. Run as its own systemd service,
+"""Listens for keypresses from a USB HID keypad (tested against a Rii i4, whose RF
+dongle identifies to Linux only as "Telink Wireless Receiver" -- device detection
+below is capability-based, not name-based, so it isn't tied to that specific string)
+and toggles LED scoreboard rotation categories live. Run as its own systemd service,
 independent of the display process -- see systemd/mlb-led-keypad.service.
 
 Key mapping (number row):
@@ -10,12 +12,18 @@ Key mapping (number row):
 Requires the `evdev` package (Linux only -- see requirements.rpi.txt) and read access
 to /dev/input/event*, which is why this runs as root in its systemd unit.
 """
+import logging
 import sys
 
 from evdev import InputDevice, categorize, ecodes, list_devices
 
 from bullpen.logging import LOGGER
 from data.rotation_toggles import RotationToggles
+
+# Unlike main.py, nothing here constructs a Config (which is what normally sets the
+# bullpen logger's level based on config.json's "debug" flag), so without this the
+# logger stays at its default level and every LOGGER.info() call below is silently dropped.
+LOGGER.setLevel(logging.INFO)
 
 # A cheap wireless keypad's RF dongle commonly exposes several separate event
 # nodes under its chipset vendor's name (e.g. "Telink Wireless Receiver") rather
