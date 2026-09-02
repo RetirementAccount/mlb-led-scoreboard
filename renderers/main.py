@@ -45,7 +45,7 @@ class MainRenderer:
                 if not self.data.rotation_toggles.is_enabled(plugin):
                     continue
                 if t := self.data.config.screen_time_at_priority(plugin, self.data.schedule.priority):
-                    LOGGER.debug("Rotating to plugin %s for %d seconds", plugin, t)
+                    LOGGER.info("[diag] Entering plugin screen: %s", plugin)
                     cond = with_pause_and_skip(
                         self.data.rotation_control, any_of(timer_cond(t), self.scrolling_finished_cond())
                     )
@@ -71,7 +71,9 @@ class MainRenderer:
                 break
             seen_games.add(game.game_id)
 
-            LOGGER.debug("Render thread: showing game %d / %d", len(seen_games), self.data.schedule.num_games())
+            LOGGER.info(
+                "[diag] Entering game %d / %d: %s", len(seen_games), self.data.schedule.num_games(), game.game_id
+            )
 
             cond = with_pause_and_skip(
                 self.data.rotation_control,
@@ -257,6 +259,7 @@ def with_pause_and_skip(control, base_cond: Callable[[], bool]) -> Callable[[], 
 
     def cond():
         if control.consume_skip():
+            LOGGER.info("[diag] Skip consumed, ending current screen")
             return False
         if control.is_paused():
             return True
