@@ -78,10 +78,13 @@ class MainRenderer:
                 # main-loop refresh cycle (~0.5-1s) -- see data/utils/double_buffer.py. If
                 # skip is pressed faster than that, .next() just returns the same game
                 # again since a new one isn't ready yet. Rather than show it again (or give
-                # up on MLB entirely), wait briefly for the data thread to catch up so skip
-                # reliably walks through every game -- this is the one legitimate reason a
-                # skip-driven advance is allowed to have real latency, bounded so it can't
-                # hang indefinitely if something else is actually wrong.
+                # up on MLB entirely), wait for the data thread to catch up so skip reliably
+                # walks through every game -- this is the one legitimate reason a
+                # skip-driven advance is allowed to have real latency. The wait is generous
+                # (15s): we already know for certain (via num_games()) whether more distinct
+                # games actually exist, so there's no reason to give up early just because a
+                # burst of presses needs several real seconds to resolve one at a time --
+                # only a genuinely stuck data thread should ever hit this timeout.
                 game = self.__wait_for_next_game(seen_games)
                 if game is None:
                     LOGGER.warning("Render thread: data thread didn't catch up in time, moving on")
@@ -108,7 +111,7 @@ class MainRenderer:
                     self.data.config.layout.state_for_game(game)
                     self.__draw_game(game)
 
-    def __wait_for_next_game(self, seen_games: set, timeout: float = 2.0, poll_interval: float = 0.1):
+    def __wait_for_next_game(self, seen_games: set, timeout: float = 15.0, poll_interval: float = 0.1):
         """Poll self.data.games.next() until it hands back a game not already in
         seen_games, or give up after timeout seconds (returning None)."""
         deadline = time.monotonic() + timeout
