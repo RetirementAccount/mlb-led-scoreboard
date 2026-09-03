@@ -6,6 +6,14 @@ This doc captures where the project stands so Claude Code has full context witho
 
 A wall-mounted (eventually desk-optional) LED matrix sports ticker that rotates through multiple content types: MLB scores, other sports (NFL/NHL as later additions), news headlines, and eventually fun modes (crypto/Kalshi ticker, music visualizer/equalizer, retro mini-games, FitQuest stat display). Mode switching intended to eventually be controlled via a Stream Deck or macro pad over USB.
 
+## Current status (as of 2026-09-03) — read this first
+
+- **Display and keypad control are both live, verified on real hardware, and running as persistent systemd services** on the Pi (`mlb-led-scoreboard.service`, `mlb-led-keypad.service`) — both `enabled`, so they auto-start on every boot with no manual steps.
+- **MLB** (built-in) **+ NFL/NHL/NBA/NCAAF/NCAAB/EPL** (`espn_sports/`, this session's addition) all rotate together, all showing real live data. The new leagues now use MLB-style colored team banner bars (real per-team ESPN colors), not plain text.
+- **Live rotation control**: any category (MLB, news, standings, any of the 6 sports) can be toggled on/off, and the current screen can be paused or skipped forward, either from the physical Rii i4 keypad or over SSH via `./toggle_rotation.py`. See the dated sections below for exact keys and the real bugs hit getting this reliable.
+- **Not started yet**: crypto/Kalshi ticker (own `bullpen` plugin, not built — see the LEDMatrix comparison below for a possible shortcut), second panel (hardware wiring), physical mounting + diffusion acrylic install (acrylic ordered, not installed), hand-drawn team logos (auto-downloaded ones were tried and rejected as too blurry at this resolution).
+- **Known accepted tradeoff**: rapid skip-presses on MLB games can lag or briefly re-show the same game if pressed faster than the data thread can keep up (~0.5-1s per game); Eric's chosen to just pace presses rather than have a background agent bypass the underlying double-buffer. Plugin screens (news/standings/the 6 sports) don't have this limitation — skip is instant there.
+
 ## Hardware (current + planned)
 
 - **Panels:** 2x Adafruit 64x32 RGB LED Matrix, 5mm pitch, 12.5" each. Only **1 panel currently wired and confirmed working**. Second panel deferred — needs its own power path (see below) before adding.
@@ -31,10 +39,10 @@ A wall-mounted (eventually desk-optional) LED matrix sports ticker that rotates 
   Notes on flags: `--led-gpio-mapping=adafruit-hat` is required (default "regular" mapping produces a blank display on this hardware). `--led-cols=64 --led-rows=32` is required (defaults to 32x32, which without this flag renders a 32-wide image that visually "duplicates" across the 64-wide panel).
   For 2 panels later: `--led-chain=2` instead of `--led-chain=1`.
 - **Emulator mode (`--emulated`) is currently broken** on this setup — hit a version-mismatch bug between the scoreboard code and newer `RGBMatrixEmulator` releases (`AttributeError` on `config.matrix_options.emulator_title`). Downgrading to `RGBMatrixEmulator==0.16.3` didn't fully resolve it either — the real (non-emulated) hardware path is what's actually confirmed working, so real-hardware testing is the practical path forward rather than the emulator.
-- **Not yet configured:**
-  - `config.json` favorite team(s)/division(s) — still defaults
-  - OpenWeatherMap API key (currently invalid/placeholder, throws a warning, weather screen non-functional until set — free key from home.openweathermap.org)
-  - `colors/teams.json`, `colors/scoreboard.json`, `coordinates/w32h32.json` — all currently missing, falling back to defaults (may be fine, may want customizing later for the diffusion-acrylic-adjusted look)
+- **Configured**: favorite team is Cubs (`news_ticker.teams`, `standings.divisions: ["NL Central", "NL Wild Card"]`).
+- **Still not configured:**
+  - OpenWeatherMap API key (currently invalid/placeholder, throws a warning on every startup, weather screen non-functional until set — free key from home.openweathermap.org)
+  - `colors/teams.json`, `colors/scoreboard.json`, `coordinates/w64h32.json` — all currently missing, falling back to defaults (may be fine, may want customizing later for the diffusion-acrylic-adjusted look)
 
 ## Display now runs as a systemd service (persistent, auto-start)
 
@@ -84,7 +92,7 @@ Built `espn_sports/` (`mlb-led-scoreboard-espn-sports` package) — one shared p
 
 ## Next steps (in rough priority order, per Eric's direction)
 
-1. **Crypto/Kalshi ticker mode** — still not started; would be its own `bullpen` plugin following the same pattern as the new sports plugins. Once built, add `"crypto"` (or similar) to `data/rotation_toggles.py`'s `ALL_KINDS` and give it a free keypad key (`Q`/`W`/etc. are open — see keypad section below for the full key inventory).
+1. **Crypto/Kalshi ticker mode** — still not started; would be its own `bullpen` plugin following the same pattern as the new sports plugins. Once built, add `"crypto"` (or similar) to `data/rotation_toggles.py`'s `ALL_KINDS` and give it a free keypad key (`Q`/`W`/etc. are open — see keypad section below for the full key inventory). **Possible shortcut**: a fork-agent comparison against `github.com/ChuckBuilds/LEDMatrix` (2026-09-03, see below) found that project already has a working crypto/stock ticker (`assets/stocks/` — crypto icons, forex icons, a nasdaq ticker list) — worth reading its actual plugin source before building from scratch, may save real time.
 2. **Second panel** — deferred by choice. Needs the barrel-jack-to-screw-terminal adapter (or checking whether one shipped with the panels already) before wiring in.
 3. **Physical mounting** — deferred by choice, planned for after software is further along. Backing board + acrylic install (acrylic now ordered — see Hardware section).
 
@@ -133,6 +141,27 @@ Eric wanted the other leagues to look like MLB's polished team banner (`renderer
 - New color helpers in `colors.py`: `bar_fill_color()` (primary color, no luminance floor — unlike `readable_team_color`, a dark navy fill is fine since only the text on top needs contrast), `bar_accent_color()` (alternate color), `contrasting_text_color()` (black/white by fill luminance). `readable_team_color()` from the earlier color work is no longer used by the default layout (it existed for plain-black-background text) but is left in place since nothing else needed removing.
 - Sanity-checked the exact color/layout math with a scaled-up PIL-rendered preview (bypassing the LED matrix/emulator entirely, which is still broken here) before deploying — confirmed the contrast logic picks white text on a dark navy bar and black text on a bright green bar correctly.
 - The logo-mode layout (`_render_with_logos`, `show_logos: true`) is untouched — still the older simpler layout, since logos are shelved anyway.
+
+## Power interruption + persistent journal logging (2026-09-03)
+
+Eric reported the display "going to sleep after a few minutes." Investigation: the Pi was completely unreachable (not even `ping`), which turned out to be because Eric had unplugged the Pi's power supply at the wall (rather than pulling the fragile USB-C connector) and hadn't yet plugged it back in — not a software/rotation-loop issue at all. Once repowered, both systemd services came back up cleanly on their own (that's what `enabled` is for).
+
+Two things worth knowing for next time:
+- **The journal wasn't persistent** (`Storage=auto` in `/etc/systemd/journald.conf`, which defaults to volatile-only unless `/var/log/journal` already existed with the right setup) — so there was zero log history from before the reboot to diagnose with. Fixed: set `Storage=persistent` and restarted `systemd-journald`. Current usage is a few MB against 106GB free, a total non-issue space-wise.
+- `vcgencmd get_throttled` briefly showed `0x50000` (under-voltage + throttling occurred since boot) right after the fresh boot — this was almost certainly just the transient of the power reconnect itself, not a chronic supply problem, given Eric's explanation. Worth remembering as a diagnostic tool if a *real* unexplained crash happens later: `0x1`/`0x4` bits mean it's happening *right now*, `0x10000`/`0x40000` bits mean it happened *at some point since boot* — and a Pi 5 specifically needs its official 27W (5V/5A) USB-C supply, an underrated Pi-4-era supply is a common real cause of this exact symptom.
+
+## GitHub project comparison: ChuckBuilds/LEDMatrix (2026-09-03)
+
+At Eric's request, compared his project against `github.com/ChuckBuilds/LEDMatrix` (a similar from-scratch LED matrix sports/info ticker, not a fork of the same MLB-LED-Scoreboard lineage) via a background research pass, specifically looking for ideas worth borrowing.
+
+**Worth following up on:**
+- **Crypto/stock ticker already built there** (`assets/stocks/` — crypto icons, forex icons, a nasdaq ticker config) — the single most directly relevant thing, given item 1 in Next Steps above. Worth reading its actual plugin source before building Eric's own from scratch.
+- **A local web UI** (`web_interface/`, Flask-based) with a "plugin store" for enabling/reordering/configuring displays (durations, teams, stocks, etc.) — a much richer control surface than SSH + keypad. Worth a look if phone/laptop control is ever wanted alongside (or instead of) the keypad.
+- Broader general feature scope: weather, Google Calendar, music now-playing, custom text, YouTube subscriber count, an installable third-party plugin ecosystem. Actively maintained (created Apr 2025, pushed the day before this comparison, 87 stars, real Discord community).
+
+**Not worth chasing:** its bundled per-league logos use the exact same technique Eric already tried and rejected (plain `PIL.Image.thumbnail(..., LANCZOS)` downscale of a large source PNG, `src/common/logo_helper.py:304`) — no special pixel-art cleanup. They likely read better there mainly because their reference/documented hardware is **two 64x32 panels chained (128x32 effective)**, not a smarter algorithm. Relevant to the still-open "second panel" item: once that's wired up, may be worth re-testing plain downscaled logos at the wider resolution rather than assuming they'll still fail — but this is speculative, not confirmed.
+
+**Where Eric's project is already ahead**, for context: the MLB-style colored team banner bars (real per-team hex colors, contrast-aware text, zero asset maintenance) are a cleaner approach than downloading and squashing a 768px logo; the pause/skip-forward live control via physical keypad (with real thread-safety lessons learned) is a more specific tuned interaction than LEDMatrix's web-UI-driven duration/ordering config.
 
 ## Working conventions to carry over
 
