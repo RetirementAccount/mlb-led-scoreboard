@@ -3,17 +3,29 @@ from typing import TYPE_CHECKING, Optional
 import bullpen.api as api
 from bullpen.util import center_text_position
 
-from .colors import readable_team_color
+from .colors import bar_accent_color, bar_fill_color, contrasting_text_color
 from .config import ConfigBase
 from .data import Data
+from .models import TeamScore
 
 if TYPE_CHECKING:
     from PIL import Image
     from RGBMatrixEmulator.emulation.canvas import Canvas
 
-TITLE_Y = 7
-MATCHUP_Y = 17
-STATUS_Y = 27
+# Team banner bars -- mirrors the MLB scoreboard's team banner (renderers/games/teams.py):
+# a full-width colored bar per team, thin accent stripe, abbreviation + score on top.
+BAR_HEIGHT = 7
+AWAY_BAR_Y = 0
+HOME_BAR_Y = 7
+ACCENT_WIDTH = 2
+TEXT_X = 4
+SCORE_MARGIN_RIGHT = 2
+
+LEAGUE_Y = 21
+STATUS_Y = 29
+
+EMPTY_TITLE_Y = 14
+EMPTY_MESSAGE_Y = 22
 
 LOGO_TITLE_Y = 7
 LOGO_Y = 2
@@ -42,8 +54,8 @@ class Renderer(api.PluginRenderer[Data]):
         white = graphics.Color(255, 255, 255)
 
         if not data.games:
-            self._draw_centered(canvas, graphics, self.title_font, self.config.league_name, TITLE_Y, white)
-            self._draw_centered(canvas, graphics, self.status_font, "No games today", STATUS_Y, white)
+            self._draw_centered(canvas, graphics, self.title_font, self.config.league_name, EMPTY_TITLE_Y, white)
+            self._draw_centered(canvas, graphics, self.status_font, "No games today", EMPTY_MESSAGE_Y, white)
             return None
 
         game = data.games[self._game_index % len(data.games)]
@@ -52,37 +64,48 @@ class Renderer(api.PluginRenderer[Data]):
         if self.config.show_logos:
             self._render_with_logos(data, canvas, graphics, game)
         else:
-            self._render_text_only(canvas, graphics, game)
+            self._render_team_bars(canvas, graphics, game)
 
         return None
 
     def reset(self) -> None:
         self._game_index = 0
 
-    def _render_text_only(self, canvas, graphics, game) -> None:
+    def _render_team_bars(self, canvas, graphics, game) -> None:
+        self._draw_team_bar(canvas, graphics, game.away, AWAY_BAR_Y)
+        self._draw_team_bar(canvas, graphics, game.home, HOME_BAR_Y)
+
         white = graphics.Color(255, 255, 255)
         live_color = graphics.Color(255, 200, 0)
 
-        self._draw_centered(canvas, graphics, self.title_font, self.config.league_name, TITLE_Y, white)
-
-        away_color = graphics.Color(*readable_team_color(game.away))
-        home_color = graphics.Color(*readable_team_color(game.home))
-
-        away_text = f"{game.away.abbreviation} {game.away.score}"
-        sep_text = " - "
-        home_text = f"{game.home.score} {game.home.abbreviation}"
-        full_text = away_text + sep_text + home_text
-
-        start_x = center_text_position(full_text, canvas.width // 2, self.matchup_font["size"]["width"])
-        char_width = self.matchup_font["size"]["width"]
-        x = start_x
-        for text, color in ((away_text, away_color), (sep_text, white), (home_text, home_color)):
-            graphics.DrawText(canvas, self.matchup_font["font"], x, MATCHUP_Y, color, text)
-            x += char_width * len(text)
+        self._draw_centered(canvas, graphics, self.title_font, self.config.league_name, LEAGUE_Y, white)
 
         status = game.status_detail or ("FINAL" if game.is_final else "")
         status_color = live_color if game.is_live else white
         self._draw_centered(canvas, graphics, self.status_font, status, STATUS_Y, status_color)
+
+    def _draw_team_bar(self, canvas, graphics, team: TeamScore, y: int) -> None:
+        bg_rgb = bar_fill_color(team)
+        accent_rgb = bar_accent_color(team)
+        text_rgb = contrasting_text_color(bg_rgb)
+
+        bg_color = graphics.Color(*bg_rgb)
+        for row in range(BAR_HEIGHT):
+            graphics.DrawLine(canvas, 0, y + row, canvas.width - 1, y + row, bg_color)
+
+        accent_color = graphics.Color(*accent_rgb)
+        for row in range(BAR_HEIGHT):
+            graphics.DrawLine(canvas, 0, y + row, ACCENT_WIDTH - 1, y + row, accent_color)
+
+        text_color = graphics.Color(*text_rgb)
+        text_y = y + BAR_HEIGHT - 1
+        font_width = self.matchup_font["size"]["width"]
+
+        graphics.DrawText(canvas, self.matchup_font["font"], TEXT_X, text_y, text_color, team.abbreviation)
+
+        score_text = team.score
+        score_x = canvas.width - SCORE_MARGIN_RIGHT - len(score_text) * font_width
+        graphics.DrawText(canvas, self.matchup_font["font"], score_x, text_y, text_color, score_text)
 
     def _render_with_logos(self, data: Data, canvas, graphics, game) -> None:
         white = graphics.Color(255, 255, 255)
