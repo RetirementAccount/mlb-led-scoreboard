@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlb-led-scoreboard-toddler-racer"
+version = "0.1.0"
+description = "A very simple, never-fail toddler racing game controlled by the keypad's L/R mouse buttons"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.entry-points.'bullpen.mlbled.plugin']
+"racer" = "mlb_led_scoreboard_toddler_racer:load"

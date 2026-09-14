@@ -115,6 +115,7 @@ emulator_config.json
 # Ignore live rotation toggle/control state (runtime, not source)
 /rotation_toggles.json
 /rotation_control.json
+/game_mode.json
 
 # Ignore any customized coordinate configs
 coordinates/*.json

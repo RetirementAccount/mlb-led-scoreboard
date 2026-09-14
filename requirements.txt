@@ -7,3 +7,4 @@ bdfparser
 ./standings
 ./news
 ./espn_sports
+./toddler_racer

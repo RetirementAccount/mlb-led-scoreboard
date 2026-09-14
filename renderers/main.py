@@ -22,6 +22,7 @@ from renderers.games import pregame as pregamerender
 from renderers.games import teams
 
 CONTROL_POLL_INTERVAL = 0.05  # seconds -- see __draw_plugin_screen
+GAME_MODE_PLUGIN = "racer"  # bullpen plugin name shown exclusively while data.game_mode is active
 
 
 class MainRenderer:
@@ -37,6 +38,17 @@ class MainRenderer:
 
     def render(self) -> NoReturn:
         while True:
+            if self.data.game_mode.is_active():
+                if GAME_MODE_PLUGIN not in self.plugins:
+                    LOGGER.warning("Game mode is active but plugin '%s' isn't installed -- turning it off", GAME_MODE_PLUGIN)
+                    self.data.game_mode.set_active(False)
+                    continue
+                # Exclusive: bypasses the normal rotation entirely while active, rather
+                # than being one more timed screen in it -- a game needs continuous
+                # player-driven rendering, not a timed turn.
+                self.__draw_plugin_screen(GAME_MODE_PLUGIN, self.data.game_mode.is_active)
+                continue
+
             drew_anything = False
 
             if self.data.schedule.num_games() > 0 and self.data.rotation_toggles.is_enabled("game"):
