@@ -5,6 +5,8 @@ from pathlib import Path
 from mlb_led_scoreboard_toddler_racer.config import Config
 from mlb_led_scoreboard_toddler_racer.renderer import (
     CAR_HEIGHT,
+    CAR_HIT_PENALTY,
+    CAR_PASS_POINTS,
     CAR_STRIPE_COLORS_RGB,
     CAR_WIDTH,
     CAR_Y_MARGIN,
@@ -13,6 +15,7 @@ from mlb_led_scoreboard_toddler_racer.renderer import (
     OBSTACLE_HEIGHT,
     OBSTACLE_WIDTH,
     OIL_HEIGHT,
+    OIL_HIT_PENALTY,
     OIL_MASK,
     OIL_WIDTH,
     Renderer,
@@ -140,7 +143,7 @@ class TestRendererGameplay(unittest.TestCase):
 
         self.assertEqual(self.renderer.lives, self.renderer.config.starting_lives - 1)
         self.assertGreater(self.renderer.hit_animation_frames_remaining, 0)
-        self.assertEqual(self.renderer.score, 0)
+        self.assertEqual(self.renderer.score, -CAR_HIT_PENALTY)
 
     def test_colliding_obstacle_despawns_immediately(self):
         self.renderer.obstacles = [make_car_obstacle(x=float(self.renderer.car_x), y=float(car_y(self.renderer)))]
@@ -157,6 +160,7 @@ class TestRendererGameplay(unittest.TestCase):
         self.assertEqual(self.renderer.lives, self.renderer.config.starting_lives)  # unchanged
         self.assertGreater(self.renderer.hit_animation_frames_remaining, 0)
         self.assertEqual(self.renderer.obstacles, [])  # despawns immediately, same as a car hit
+        self.assertEqual(self.renderer.score, -OIL_HIT_PENALTY)
 
     def test_car_crash_fully_freezes_the_world(self):
         self.renderer.obstacles = [make_car_obstacle(x=float(self.renderer.car_x), y=float(car_y(self.renderer)))]
@@ -232,16 +236,26 @@ class TestRendererGameplay(unittest.TestCase):
         self.assertEqual(obstacle["y"], 0.0)  # nothing moved
         self.assertEqual(self.renderer.hit_animation_frames_remaining, 4)
 
-    def test_passing_an_obstacle_without_hitting_it_scores_a_point(self):
-        # An obstacle that falls past the bottom without ever overlapping the car --
-        # unlike the old never-fail design, this is now the only way to score.
+    def test_passing_a_car_without_hitting_it_scores_ten_points(self):
+        # A car that falls past the bottom without ever overlapping the player's car.
         self.renderer.config.spawn_interval_frames = 10_000  # disable auto-spawn for this test
         self.renderer.obstacles = [make_car_obstacle(x=float(self.renderer.road_right + 100), y=0.0)]
         for _ in range(int(self.renderer.height / self.renderer.config.fall_speed) + 2):
             self.renderer._advance()
 
-        self.assertEqual(self.renderer.score, 1)
+        self.assertEqual(self.renderer.score, CAR_PASS_POINTS)
         self.assertEqual(self.renderer.lives, self.renderer.config.starting_lives)
+        self.assertEqual(self.renderer.obstacles, [])  # fell off screen and was removed
+
+    def test_passing_oil_without_hitting_it_scores_nothing(self):
+        # Unlike a car, safely passing an oil patch isn't worth anything -- it only
+        # penalizes a hit.
+        self.renderer.config.spawn_interval_frames = 10_000  # disable auto-spawn for this test
+        self.renderer.obstacles = [make_oil_obstacle(x=float(self.renderer.road_right + 100), y=0.0)]
+        for _ in range(int(self.renderer.height / (self.renderer.config.fall_speed * DASH_SPEED_MULTIPLIER)) + 2):
+            self.renderer._advance()
+
+        self.assertEqual(self.renderer.score, 0)
         self.assertEqual(self.renderer.obstacles, [])  # fell off screen and was removed
 
     def test_game_over_triggers_only_after_the_hit_animation_finishes_on_last_life(self):

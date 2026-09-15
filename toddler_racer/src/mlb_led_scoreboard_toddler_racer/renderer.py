@@ -23,8 +23,14 @@ if TYPE_CHECKING:
 #     fully freezes the world -- no obstacle moves or spawns until the spin ends.
 #   - an oil patch: no life lost, and only steering locks -- the road and every
 #     other obstacle keep moving normally underneath the spinning car.
-# Safely passing either scores a point. Losing the last life ends the game with a
-# Game Over overlay, restarted via the confirm key.
+# Safely passing a car scores points; an oil patch grants nothing for a safe pass
+# but penalizes a hit, same as a car's collision penalty just smaller (no life
+# lost). Losing the last life ends the game with a Game Over overlay, restarted via
+# the confirm key.
+CAR_PASS_POINTS = 10
+OIL_HIT_PENALTY = 20
+CAR_HIT_PENALTY = 50
+
 ROAD_MARGIN_FRACTION = 0.2  # road spans the middle (1 - 2*margin) of the panel width
 CAR_WIDTH = 3  # the car's body -- vertically oriented (taller than wide), tires drawn outside this
 TIRE_WIDTH = 1
@@ -210,16 +216,18 @@ class Renderer(api.PluginRenderer[Data]):
             if self._overlaps(obstacle, car_y):
                 if obstacle["type"] == "oil":
                     self.freeze_world = False  # spin-out only -- no life lost, see the module docstring
+                    self.score -= OIL_HIT_PENALTY
                 else:
                     self.lives -= 1
                     self.freeze_world = True
+                    self.score -= CAR_HIT_PENALTY
                 self.hit_animation_frames_remaining = self.config.hit_animation_frames
                 continue  # despawn immediately, same as fruit_catcher's caught objects
 
             if obstacle["y"] < self.height:
                 remaining.append(obstacle)
-            else:
-                self.score += 1  # passed the bottom edge without ever hitting the car
+            elif obstacle["type"] == "car":
+                self.score += CAR_PASS_POINTS  # oil grants nothing for a safe pass, only penalizes a hit
         self.obstacles = remaining
 
         if self.frame_count % self.config.spawn_interval_frames == 0:
