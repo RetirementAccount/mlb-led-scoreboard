@@ -97,6 +97,11 @@ class RotationControl:
             with open(self.path, "w") as f:
                 json.dump({"paused": self._paused, "skip": self._skip}, f, indent=2)
                 f.write("\n")
+            # Both the display and keypad listener write this file as root (systemd
+            # User=root), but manual SSH/CLI use (toggle_rotation.py) runs as program27
+            # -- without this, whichever process creates the file first locks the other
+            # user out with a silent "Permission denied" on every subsequent write.
+            self.path.chmod(0o666)
             self._mtime = self.path.stat().st_mtime
         except OSError as e:
             LOGGER.warning("Failed to save rotation control state to %s: %s", self.path, e)
