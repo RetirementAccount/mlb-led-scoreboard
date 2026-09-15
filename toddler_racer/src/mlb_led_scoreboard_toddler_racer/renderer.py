@@ -23,6 +23,11 @@ OBSTACLE_HEIGHT = 6
 FLASH_FRAMES = 4
 DASH_LENGTH = 2
 DASH_PERIOD = 6
+# Road dashes previously scrolled at exactly 1px/frame -- the same rate obstacles
+# fall at (fall_speed=1.0px/frame default) -- which made the obstacles look
+# stationary relative to the road. Scrolling the dashes twice as fast as the
+# 1px/frame baseline sells the illusion that everything is moving.
+DASH_SPEED_MULTIPLIER = 2
 
 GRASS_RGB = (20, 90, 20)
 ROAD_RGB = (50, 50, 50)
@@ -144,8 +149,9 @@ class Renderer(api.PluginRenderer[Data]):
 
         dash_color = graphics.Color(*DASH_RGB)
         center_x = (self.road_left + self.road_right) // 2
+        dash_scroll = self.frame_count * DASH_SPEED_MULTIPLIER
         for y in range(self.height):
-            if (y - self.frame_count) % DASH_PERIOD < DASH_LENGTH:
+            if (y - dash_scroll) % DASH_PERIOD < DASH_LENGTH:
                 graphics.DrawLine(canvas, center_x, y, center_x, y, dash_color)
 
         obstacle_color = graphics.Color(*OBSTACLE_RGB)
