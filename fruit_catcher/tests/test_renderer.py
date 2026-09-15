@@ -172,6 +172,30 @@ class TestFruitCatcherGameplay(unittest.TestCase):
 
         self.assertEqual(obj["y"], float(PLAYFIELD_TOP))
 
+    def test_caught_fruit_despawns_immediately_instead_of_falling_past_the_catcher(self):
+        catcher_y = self.renderer.height - 2 - 4  # CATCHER_Y_MARGIN, BASKET_HEIGHT
+        self.renderer.objects = [make_object(x=float(self.renderer.catcher_x), y=float(catcher_y), pattern="straight")]
+
+        self.renderer._advance()
+
+        self.assertEqual(self.renderer.objects, [])
+
+    def test_caught_bomb_despawns_immediately(self):
+        catcher_y = self.renderer.height - 2 - 4
+        self.renderer.objects = [make_object(x=float(self.renderer.catcher_x), y=float(catcher_y), type="bomb", pattern="straight")]
+
+        self.renderer._advance()
+
+        self.assertEqual(self.renderer.objects, [])
+
+    def test_missing_sprite_falls_back_to_none_for_every_item(self):
+        # No PNGs are checked into the repo (that's the point -- Eric supplies his
+        # own), so every lookup should resolve to None and drawing should fall back
+        # to the built-in color blobs rather than erroring.
+        for key, sprite in self.renderer._sprites.items():
+            with self.subTest(key=key):
+                self.assertIsNone(sprite)
+
     def test_spawned_object_is_within_playfield_bounds(self):
         obj = self.renderer._spawn_object()
         self.assertGreaterEqual(obj["x"], 0)
