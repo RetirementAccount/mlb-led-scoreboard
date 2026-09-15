@@ -83,7 +83,7 @@ class TestRendererGameplay(unittest.TestCase):
 
     def test_catching_an_obstacle_scores_a_point_and_flashes_without_ending_the_game(self):
         # Place an obstacle directly on the car and at car height, then advance once.
-        car_y = self.renderer.height - 2 - 5  # CAR_Y_MARGIN=2, CAR_HEIGHT=5
+        car_y = self.renderer.height - 2 - 6  # CAR_Y_MARGIN=2, CAR_HEIGHT=6
         self.renderer.obstacles = [{"x": self.renderer.car_x, "y": float(car_y), "caught": False}]
 
         self.renderer._advance()

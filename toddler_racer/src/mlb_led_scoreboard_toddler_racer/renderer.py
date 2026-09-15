@@ -34,10 +34,11 @@ SCORE_RGB = (255, 255, 255)
 
 # Eric's toddler requested a rainbow-striped car -- one row per hue, most-primary
 # version of each, top to bottom. This also sets CAR_HEIGHT (one row per stripe),
-# replacing the old flat CAR_RGB fill; obstacles keep their own solid OBSTACLE_RGB
-# and OBSTACLE_HEIGHT unchanged.
+# which now happens to match OBSTACLE_HEIGHT (both 6) now that orange is included --
+# not load-bearing, just a coincidence of there being six rainbow colors.
 CAR_STRIPE_COLORS_RGB = [
     (255, 0, 0),  # red
+    (255, 140, 0),  # orange
     (255, 255, 0),  # yellow
     (0, 200, 0),  # green
     (0, 0, 255),  # blue
