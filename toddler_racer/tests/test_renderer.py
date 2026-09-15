@@ -8,8 +8,13 @@ from mlb_led_scoreboard_toddler_racer.renderer import (
     CAR_STRIPE_COLORS_RGB,
     CAR_WIDTH,
     CAR_Y_MARGIN,
+    DASH_SPEED_MULTIPLIER,
     HEART_MASK,
+    OBSTACLE_HEIGHT,
     OBSTACLE_WIDTH,
+    OIL_HEIGHT,
+    OIL_MASK,
+    OIL_WIDTH,
     Renderer,
     SPIN_CYCLE_FRAMES,
 )
@@ -48,6 +53,18 @@ def make_renderer(tmp_path: Path) -> Renderer:
 
 def car_y(renderer: Renderer) -> int:
     return renderer.height - CAR_Y_MARGIN - CAR_HEIGHT
+
+
+def make_car_obstacle(**overrides) -> dict:
+    obstacle = {"x": 0.0, "y": 0.0, "type": "car", "width": OBSTACLE_WIDTH, "height": OBSTACLE_HEIGHT}
+    obstacle.update(overrides)
+    return obstacle
+
+
+def make_oil_obstacle(**overrides) -> dict:
+    obstacle = {"x": 0.0, "y": 0.0, "type": "oil", "width": OIL_WIDTH, "height": OIL_HEIGHT}
+    obstacle.update(overrides)
+    return obstacle
 
 
 class TestRendererGameplay(unittest.TestCase):
@@ -109,8 +126,8 @@ class TestRendererGameplay(unittest.TestCase):
             self.renderer._advance()
         self.assertEqual(len(self.renderer.obstacles), 1)
 
-    def test_colliding_with_an_obstacle_costs_a_life_and_starts_the_hit_animation(self):
-        self.renderer.obstacles = [{"x": float(self.renderer.car_x), "y": float(car_y(self.renderer))}]
+    def test_colliding_with_a_car_obstacle_costs_a_life_and_starts_the_hit_animation(self):
+        self.renderer.obstacles = [make_car_obstacle(x=float(self.renderer.car_x), y=float(car_y(self.renderer)))]
 
         self.renderer._advance()
 
@@ -119,11 +136,61 @@ class TestRendererGameplay(unittest.TestCase):
         self.assertEqual(self.renderer.score, 0)
 
     def test_colliding_obstacle_despawns_immediately(self):
-        self.renderer.obstacles = [{"x": float(self.renderer.car_x), "y": float(car_y(self.renderer))}]
+        self.renderer.obstacles = [make_car_obstacle(x=float(self.renderer.car_x), y=float(car_y(self.renderer)))]
 
         self.renderer._advance()
 
         self.assertEqual(self.renderer.obstacles, [])
+
+    def test_colliding_with_oil_spins_the_car_out_without_costing_a_life(self):
+        self.renderer.obstacles = [make_oil_obstacle(x=float(self.renderer.car_x), y=float(car_y(self.renderer)))]
+
+        self.renderer._advance()
+
+        self.assertEqual(self.renderer.lives, self.renderer.config.starting_lives)  # unchanged
+        self.assertGreater(self.renderer.hit_animation_frames_remaining, 0)
+        self.assertEqual(self.renderer.obstacles, [])  # despawns immediately, same as a car hit
+
+    def test_car_crash_fully_freezes_the_world(self):
+        self.renderer.obstacles = [make_car_obstacle(x=float(self.renderer.car_x), y=float(car_y(self.renderer)))]
+        self.renderer._advance()  # triggers the crash
+        self.assertTrue(self.renderer.freeze_world)
+
+        other = make_car_obstacle(x=5.0, y=5.0)
+        self.renderer.obstacles.append(other)
+        self.renderer._advance()
+
+        self.assertEqual(other["y"], 5.0)  # untouched -- the world is paused
+
+    def test_oil_spin_out_only_locks_steering_the_world_keeps_moving(self):
+        self.renderer.obstacles = [make_oil_obstacle(x=float(self.renderer.car_x), y=float(car_y(self.renderer)))]
+        self.renderer._advance()  # triggers the spin-out
+        self.assertFalse(self.renderer.freeze_world)
+
+        other = make_car_obstacle(x=5.0, y=5.0)
+        self.renderer.obstacles.append(other)
+        self.renderer._advance()
+
+        self.assertGreater(other["y"], 5.0)  # kept falling despite the car being mid-spin
+
+        # steering is still locked, per Eric's spec, even though the world moved
+        start_x = self.renderer.car_x
+        self.renderer._game_mode.set_steer_held("left", True)
+        self.renderer._consume_input()
+        self.assertEqual(self.renderer.car_x, start_x)
+
+    def test_oil_falls_at_the_road_scroll_speed_not_the_car_obstacle_speed(self):
+        # Painted on the road surface, not an independently moving thing -- should
+        # scroll at the same rate as the dashes (DASH_SPEED_MULTIPLIER x fall_speed),
+        # not the slower default obstacle fall_speed.
+        oil = make_oil_obstacle(x=0.0, y=0.0)
+        car = make_car_obstacle(x=10.0, y=0.0)
+        self.renderer.obstacles = [oil, car]
+
+        self.renderer._advance()
+
+        self.assertEqual(oil["y"], self.renderer.config.fall_speed * DASH_SPEED_MULTIPLIER)
+        self.assertEqual(car["y"], self.renderer.config.fall_speed)
 
     def test_default_hit_animation_is_exactly_two_full_spins(self):
         # Eric's request: the car should spin 360 degrees twice in place before the
@@ -135,7 +202,7 @@ class TestRendererGameplay(unittest.TestCase):
         # A second obstacle spawning or moving mid-animation would risk hitting the
         # car again before the player could react -- nothing should advance until
         # the full spin animation (not just one frame of it) finishes.
-        self.renderer.obstacles = [{"x": float(self.renderer.car_x), "y": float(car_y(self.renderer))}]
+        self.renderer.obstacles = [make_car_obstacle(x=float(self.renderer.car_x), y=float(car_y(self.renderer)))]
         self.renderer._advance()  # triggers the collision and starts the animation
         total_frames = self.renderer.hit_animation_frames_remaining
 
@@ -148,8 +215,9 @@ class TestRendererGameplay(unittest.TestCase):
 
     def test_gameplay_is_frozen_during_the_hit_animation(self):
         self.renderer.hit_animation_frames_remaining = 5
+        self.renderer.freeze_world = True  # this is what a car crash sets -- see test_car_crash_fully_freezes_the_world
         self.renderer.lives = 2
-        obstacle = {"x": 0.0, "y": 0.0}
+        obstacle = make_car_obstacle(x=0.0, y=0.0)
         self.renderer.obstacles = [obstacle]
 
         self.renderer._advance()
@@ -161,7 +229,7 @@ class TestRendererGameplay(unittest.TestCase):
         # An obstacle that falls past the bottom without ever overlapping the car --
         # unlike the old never-fail design, this is now the only way to score.
         self.renderer.config.spawn_interval_frames = 10_000  # disable auto-spawn for this test
-        self.renderer.obstacles = [{"x": float(self.renderer.road_right + 100), "y": 0.0}]
+        self.renderer.obstacles = [make_car_obstacle(x=float(self.renderer.road_right + 100), y=0.0)]
         for _ in range(int(self.renderer.height / self.renderer.config.fall_speed) + 2):
             self.renderer._advance()
 
@@ -202,7 +270,7 @@ class TestRendererGameplay(unittest.TestCase):
 
     def test_nothing_advances_once_game_over(self):
         self.renderer.game_over = True
-        obstacle = {"x": 0.0, "y": 0.0}
+        obstacle = make_car_obstacle(x=0.0, y=0.0)
         self.renderer.obstacles = [obstacle]
 
         self.renderer._advance()
@@ -213,7 +281,7 @@ class TestRendererGameplay(unittest.TestCase):
         self.renderer.score = 5
         self.renderer.lives = 0
         self.renderer.game_over = True
-        self.renderer.obstacles = [{"x": 0.0, "y": 0.0}]
+        self.renderer.obstacles = [make_car_obstacle()]
 
         self.renderer.reset()
 
@@ -248,7 +316,7 @@ class TestRendererGameplay(unittest.TestCase):
         # a life is lost, and 0 hearts (not 1) on the final life.
         drawn_at = []
         self.renderer._draw_sprite = lambda canvas, sprite, x, y: drawn_at.append(x)
-        self.renderer._draw_heart_mask = lambda canvas, graphics, x, y, color: drawn_at.append(x)
+        self.renderer._draw_mask = lambda canvas, graphics, mask, x, y, color: drawn_at.append(x)
 
         self.renderer.lives = 3
         self.renderer._draw_lives(canvas=None, graphics=FakeGraphicsColor())

@@ -10,6 +10,7 @@ DEFAULT_STARTING_LIVES = 3
 # Renderer._advance): no obstacles move or spawn, so the one that hit the car can't
 # immediately hit it again once play resumes -- it's already been removed by then.
 DEFAULT_HIT_ANIMATION_FRAMES = 16
+DEFAULT_OIL_CHANCE = 0.2  # fraction of spawns that are an oil patch instead of a car
 
 
 class Config(api.PluginConfig):
@@ -21,3 +22,4 @@ class Config(api.PluginConfig):
         self.frame_seconds = plugin_config.get("frame_seconds", DEFAULT_FRAME_SECONDS)
         self.starting_lives = plugin_config.get("starting_lives", DEFAULT_STARTING_LIVES)
         self.hit_animation_frames = plugin_config.get("hit_animation_frames", DEFAULT_HIT_ANIMATION_FRAMES)
+        self.oil_chance = plugin_config.get("oil_chance", DEFAULT_OIL_CHANCE)

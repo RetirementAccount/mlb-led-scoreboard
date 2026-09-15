@@ -16,9 +16,15 @@ if TYPE_CHECKING:
 
 # A toddler racing game: a road down the middle of the panel, the car steered
 # left/right by the keypad's L/R mouse-click buttons, and obstacles that fall from
-# the top. Colliding with one costs a life (3 total, see fruit_catcher for the same
-# mechanism); safely passing one scores a point. Losing the last life ends the game
-# with a Game Over overlay, restarted via the confirm key.
+# the top. Two kinds of hazard, both trigger the same spin animation (two full
+# squash-cycles, see _spin_scale) and lock out steering for its duration, but differ
+# in how much of the world pauses with the car:
+#   - a car: costs a life (3 total, see fruit_catcher for the same mechanism) and
+#     fully freezes the world -- no obstacle moves or spawns until the spin ends.
+#   - an oil patch: no life lost, and only steering locks -- the road and every
+#     other obstacle keep moving normally underneath the spinning car.
+# Safely passing either scores a point. Losing the last life ends the game with a
+# Game Over overlay, restarted via the confirm key.
 ROAD_MARGIN_FRACTION = 0.2  # road spans the middle (1 - 2*margin) of the panel width
 CAR_WIDTH = 3  # the car's body -- vertically oriented (taller than wide), tires drawn outside this
 TIRE_WIDTH = 1
@@ -26,12 +32,18 @@ TIRE_HEIGHT = 2
 CAR_Y_MARGIN = 2  # pixels between the car and the bottom edge
 OBSTACLE_WIDTH = 3  # same vertical car-body silhouette as the player car, tires included
 OBSTACLE_HEIGHT = 6
+OIL_WIDTH = 5  # matches the 5x5 oil.png sprite
+OIL_HEIGHT = 5
 DASH_LENGTH = 2
 DASH_PERIOD = 6
 # Road dashes previously scrolled at exactly 1px/frame -- the same rate obstacles
 # fall at (fall_speed=1.0px/frame default) -- which made the obstacles look
 # stationary relative to the road. Scrolling the dashes twice as fast as the
-# 1px/frame baseline sells the illusion that everything is moving.
+# 1px/frame baseline sells the illusion that everything is moving. An oil patch is
+# painted on the road surface itself (unlike a car, which is its own independently
+# moving thing), so it falls at this same road-relative speed rather than the
+# slower car obstacle speed -- otherwise it would visually drift backwards relative
+# to the dashes it's supposedly stuck to.
 DASH_SPEED_MULTIPLIER = 2
 SPIN_CYCLE_FRAMES = 8  # see _spin_scale() -- same squash-cycle trick as fruit_catcher's basket
 
@@ -58,10 +70,23 @@ HEART_MASK = (
     "00100",
 )
 
-# Optional pixel-art override, same convention as fruit_catcher: drop a heart.png
-# into this directory (RGBA, transparent background) to replace the built-in
-# HEART_MASK shape. Only one sprite is needed -- lost lives simply stop drawing a
-# heart rather than needing a separate "empty" variant.
+# Oil patch hazard: falls down the road like a car obstacle, but colliding with it
+# just spins the car out (same freeze-and-spin animation as a crash) rather than
+# costing a life. OIL_MASK is the built-in placeholder used whenever no custom
+# oil.png is supplied.
+OIL_RGB = (25, 20, 15)
+OIL_MASK = (
+    "01110",
+    "11111",
+    "11111",
+    "11111",
+    "01110",
+)
+
+# Optional pixel-art overrides, same convention as fruit_catcher: drop a heart.png
+# or oil.png into this directory (RGBA, transparent background) to replace the
+# built-in placeholder shapes. Only one sprite each is needed -- lost lives simply
+# stop drawing a heart rather than needing a separate "empty" variant.
 ASSETS_DIR = Path(__file__).parent / "assets"
 SPRITE_ALPHA_THRESHOLD = 128
 
@@ -96,7 +121,8 @@ class Renderer(api.PluginRenderer[Data]):
         self.width = layout.width
         self.height = layout.height
         self._game_mode = GameMode()
-        self._heart_sprite = self._load_heart_sprite()
+        self._heart_sprite = self._load_sprite("heart.png")
+        self._oil_sprite = self._load_sprite("oil.png")
 
         road_width = int(self.width * (1 - 2 * ROAD_MARGIN_FRACTION))
         self.road_left = (self.width - road_width) // 2
@@ -105,14 +131,14 @@ class Renderer(api.PluginRenderer[Data]):
         self._reset_game()
 
     @staticmethod
-    def _load_heart_sprite() -> Optional[Image.Image]:
-        path = ASSETS_DIR / "heart.png"
+    def _load_sprite(filename: str) -> Optional[Image.Image]:
+        path = ASSETS_DIR / filename
         if not path.exists():
             return None
         try:
             return Image.open(path).convert("RGBA")
         except OSError as e:
-            LOGGER.warning("[toddler_racer] Failed to load heart sprite %s: %s", path, e)
+            LOGGER.warning("[toddler_racer] Failed to load sprite %s: %s", path, e)
             return None
 
     def wait_time(self) -> float:
@@ -134,6 +160,7 @@ class Renderer(api.PluginRenderer[Data]):
         self.lives = self.config.starting_lives
         self.frame_count = 0
         self.hit_animation_frames_remaining = 0
+        self.freeze_world = False
         self.game_over = False
 
     def _consume_input(self) -> None:
@@ -167,14 +194,24 @@ class Renderer(api.PluginRenderer[Data]):
             self.hit_animation_frames_remaining -= 1
             if self.hit_animation_frames_remaining == 0 and self.lives <= 0:
                 self.game_over = True
-            return
+            if self.freeze_world:
+                return  # a car crash pauses everything -- obstacles, spawning, all of it
+            # an oil spin-out only locks steering (see _consume_input); the road and
+            # every obstacle keep moving normally underneath the spinning car -- so
+            # fall through into the usual obstacle-processing below rather than
+            # returning early.
 
         car_y = self.height - CAR_Y_MARGIN - CAR_HEIGHT
         remaining = []
         for obstacle in self.obstacles:
-            obstacle["y"] += self.config.fall_speed
+            fall_speed = self.config.fall_speed * DASH_SPEED_MULTIPLIER if obstacle["type"] == "oil" else self.config.fall_speed
+            obstacle["y"] += fall_speed
             if self._overlaps(obstacle, car_y):
-                self.lives -= 1
+                if obstacle["type"] == "oil":
+                    self.freeze_world = False  # spin-out only -- no life lost, see the module docstring
+                else:
+                    self.lives -= 1
+                    self.freeze_world = True
                 self.hit_animation_frames_remaining = self.config.hit_animation_frames
                 continue  # despawn immediately, same as fruit_catcher's caught objects
 
@@ -185,14 +222,21 @@ class Renderer(api.PluginRenderer[Data]):
         self.obstacles = remaining
 
         if self.frame_count % self.config.spawn_interval_frames == 0:
-            x = random.randint(self.road_left, self.road_right - OBSTACLE_WIDTH)
-            self.obstacles.append({"x": x, "y": 0.0})
+            self.obstacles.append(self._spawn_obstacle())
+
+    def _spawn_obstacle(self) -> dict:
+        if random.random() < self.config.oil_chance:
+            x = random.randint(self.road_left, self.road_right - OIL_WIDTH)
+            return {"x": x, "y": 0.0, "type": "oil", "width": OIL_WIDTH, "height": OIL_HEIGHT}
+
+        x = random.randint(self.road_left, self.road_right - OBSTACLE_WIDTH)
+        return {"x": x, "y": 0.0, "type": "car", "width": OBSTACLE_WIDTH, "height": OBSTACLE_HEIGHT}
 
     def _overlaps(self, obstacle: dict, car_y: int) -> bool:
-        obstacle_bottom = obstacle["y"] + OBSTACLE_HEIGHT
+        obstacle_bottom = obstacle["y"] + obstacle["height"]
         if obstacle_bottom < car_y or obstacle["y"] > car_y + CAR_HEIGHT:
             return False
-        return not (obstacle["x"] + OBSTACLE_WIDTH < self.car_x or obstacle["x"] > self.car_x + CAR_WIDTH)
+        return not (obstacle["x"] + obstacle["width"] < self.car_x or obstacle["x"] > self.car_x + CAR_WIDTH)
 
     def _spin_scale(self) -> float:
         # Same squash-cycle trick as fruit_catcher's basket -- true rotation isn't
@@ -222,10 +266,18 @@ class Renderer(api.PluginRenderer[Data]):
                 graphics.DrawLine(canvas, center_x, y, center_x, y, dash_color)
 
         obstacle_color = graphics.Color(*OBSTACLE_RGB)
+        oil_color = graphics.Color(*OIL_RGB)
         for obstacle in self.obstacles:
+            obstacle_x = int(obstacle["x"])
             obstacle_y = int(obstacle["y"])
-            self._fill_rect(canvas, graphics, obstacle["x"], obstacle_y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT, obstacle_color)
-            self._draw_tires(canvas, graphics, obstacle["x"], obstacle_y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT)
+            if obstacle["type"] == "oil":
+                if self._oil_sprite is not None:
+                    self._draw_sprite(canvas, self._oil_sprite, obstacle_x, obstacle_y)
+                else:
+                    self._draw_mask(canvas, graphics, OIL_MASK, obstacle_x, obstacle_y, oil_color)
+            else:
+                self._fill_rect(canvas, graphics, obstacle_x, obstacle_y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT, obstacle_color)
+                self._draw_tires(canvas, graphics, obstacle_x, obstacle_y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT)
 
         car_y = self.height - CAR_Y_MARGIN - CAR_HEIGHT
         width_scale = self._spin_scale() if self.hit_animation_frames_remaining > 0 else 1.0
@@ -259,10 +311,10 @@ class Renderer(api.PluginRenderer[Data]):
             if self._heart_sprite is not None:
                 self._draw_sprite(canvas, self._heart_sprite, x, y)
             else:
-                self._draw_heart_mask(canvas, graphics, x, y, heart_color)
+                self._draw_mask(canvas, graphics, HEART_MASK, x, y, heart_color)
 
-    def _draw_heart_mask(self, canvas, graphics, x: int, y: int, color) -> None:
-        for row, line in enumerate(HEART_MASK):
+    def _draw_mask(self, canvas, graphics, mask: tuple, x: int, y: int, color) -> None:
+        for row, line in enumerate(mask):
             for col, pixel in enumerate(line):
                 if pixel == "1":
                     graphics.DrawLine(canvas, x + col, y + row, x + col, y + row, color)
