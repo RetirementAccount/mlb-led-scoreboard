@@ -18,6 +18,7 @@ from mlb_led_scoreboard_space_shooter.renderer import (
     PLAYER_WIDTH,
     PLAYER_X,
     Renderer,
+    STAR_COUNT,
 )
 
 
@@ -289,6 +290,34 @@ class TestSpaceShooterGameplay(unittest.TestCase):
             self.renderer.frame_count = frame
             seen.add(self.renderer._current_engine_color())
         self.assertEqual(seen, set(ENGINE_FLAME_CYCLE_RGB))
+
+    def test_starfield_has_the_configured_star_count(self):
+        self.assertEqual(len(self.renderer.stars), STAR_COUNT)
+
+    def test_stars_drift_left_every_frame(self):
+        star = self.renderer.stars[0]
+        start_x = star["x"]
+
+        self.renderer._move_stars()
+
+        self.assertLess(star["x"], start_x)
+
+    def test_star_wraps_to_the_right_edge_after_scrolling_off(self):
+        star = {"x": -1.0, "y": 5}
+        self.renderer.stars = [star]
+
+        self.renderer._move_stars()
+
+        self.assertEqual(star["x"], float(self.renderer.width - 1))
+
+    def test_stars_keep_moving_during_the_hit_flicker(self):
+        self.renderer.hit_flicker_frames_remaining = 5
+        star = self.renderer.stars[0]
+        start_x = star["x"]
+
+        self.renderer._advance()
+
+        self.assertLess(star["x"], start_x)
 
     def test_reset_clears_everything(self):
         self.renderer.score = 500

@@ -55,7 +55,14 @@ ENGINE_FLAME_FRAMES_PER_COLOR = 2
 # _find_lights/_draw_enemy).
 LIGHT_CHASE_FRAMES_PER_STEP = 2
 
+# A scrolling starfield background, same right-to-left scroll direction as the
+# racer's road dashes -- a handful of fixed 1px stars drifting left and wrapping
+# back to the right edge, rather than a fixed lane, since space has no road.
+STAR_COUNT = 10
+STAR_SPEED = 0.5  # slower than enemies/bullets, for a background-depth feel
+
 SPACE_RGB = (5, 5, 20)
+STAR_RGB = (180, 180, 200)
 PLAYER_RGB = (0, 200, 255)
 PLAYER_ACCENT_RGB = (255, 255, 255)
 ENEMY_RGB = (200, 30, 200)
@@ -105,6 +112,10 @@ class Renderer(api.PluginRenderer[Data]):
         self._ship_engine_pixel = self._find_engine_pixel(self._ship_sprite) if self._ship_sprite is not None else None
         self._enemy_sprites = self._load_enemy_sprites()
         self._pickup_sprite = self._load_sprite("pickup.png")
+        # Background only, not game state -- initialized once here rather than in
+        # _reset_game, so the starfield keeps scrolling seamlessly through a restart
+        # instead of jumping back to fixed starting positions.
+        self.stars = [{"x": float(random.randint(0, self.width - 1)), "y": random.randint(0, self.height - 1)} for _ in range(STAR_COUNT)]
 
         self._reset_game()
 
@@ -231,6 +242,7 @@ class Renderer(api.PluginRenderer[Data]):
             # No freeze here, unlike a car crash -- a twitchy shooter should keep
             # moving even while the player is briefly invulnerable and flickering.
 
+        self._move_stars()
         self._move_enemies()
         self._move_pickups()
         self._move_bullets()
@@ -240,6 +252,16 @@ class Renderer(api.PluginRenderer[Data]):
             self._spawn_entity()
         if self.frame_count % self.config.fire_interval_frames == 0:
             self._fire()
+
+    def _move_stars(self) -> None:
+        for star in self.stars:
+            star["x"] -= STAR_SPEED
+            if star["x"] < 0:
+                # Wrap back to the right edge with a fresh random y, rather than
+                # respawning at a fixed spot -- keeps the field looking scattered
+                # instead of every star re-entering in a single row over time.
+                star["x"] = float(self.width - 1)
+                star["y"] = random.randint(0, self.height - 1)
 
     def _move_enemies(self) -> None:
         for enemy in self.enemies:
@@ -319,6 +341,11 @@ class Renderer(api.PluginRenderer[Data]):
 
     def _draw(self, canvas, graphics) -> None:
         canvas.Fill(*SPACE_RGB)
+
+        star_color = graphics.Color(*STAR_RGB)
+        for star in self.stars:
+            x, y = int(star["x"]), star["y"]
+            graphics.DrawLine(canvas, x, y, x, y, star_color)
 
         for enemy in self.enemies:
             self._draw_enemy(canvas, graphics, enemy.get("sprite"), int(enemy["x"]), int(enemy["y"]))
