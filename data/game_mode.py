@@ -6,45 +6,60 @@ from typing import Optional
 from bullpen.logging import LOGGER
 
 STATE_PATH = Path(__file__).parent.parent / "game_mode.json"
-RELOAD_CHECK_INTERVAL = 0.05  # short: steer nudges need to feel immediate during gameplay
+RELOAD_CHECK_INTERVAL = 0.05  # short: steer/confirm need to feel immediate during gameplay
 
 
 class GameMode:
-    """Live on/off + steering state for the toddler racer game, backed by a small JSON
-    file (same pattern as RotationControl). When active, renderers/main.py's render()
-    loop shows the racer plugin exclusively, bypassing the normal MLB/plugin rotation
-    entirely, until game mode is turned off again.
+    """Live control for the "game area" -- a menu screen plus any number of simple
+    games, all just bullpen plugins dispatched exclusively (bypassing the normal
+    ticker rotation), the same way the original single-game override worked. Backed
+    by a small JSON file (same pattern as RotationControl).
 
-    Write paths (set_active, toggle_active, request_steer) always force a fresh read
-    before mutating -- same fix RotationControl needed for the same reason: the keypad
-    listener and the display are separate processes, and a write built on a stale
-    cached read can silently clobber a concurrent change from the other process.
+    `screen` is None (normal ticker) or a plugin name -- either "game_menu" or an
+    actual game's entry-point name. There's no separate "menu" concept in the data
+    model: the menu is just another plugin, dispatched by renderers/main.py exactly
+    like a game is.
+
+    Write paths (open_menu, launch, exit_to_normal, request_steer, request_confirm)
+    always force a fresh read before mutating -- same fix RotationControl needed for
+    the same reason: the keypad listener and the display are separate processes, and
+    a write built on a stale cached read can silently clobber a concurrent change
+    from the other process.
     """
+
+    MENU_PLUGIN = "game_menu"
 
     def __init__(self, path: Optional[Path] = None) -> None:
         self.path = path or STATE_PATH
-        self._active = False
+        self._screen: Optional[str] = None
         self._steer: Optional[str] = None
+        self._confirm = False
         self._mtime: Optional[float] = None
         self._last_check = 0.0
         self._load(force=True)
 
-    def is_active(self) -> bool:
+    def current_screen(self) -> Optional[str]:
         self._maybe_reload()
-        return self._active
+        return self._screen
 
-    def set_active(self, active: bool) -> None:
-        self._load(force=True)
-        self._active = active
-        self._steer = None
-        self._save()
+    def is_in_game_area(self) -> bool:
+        return self.current_screen() is not None
 
-    def toggle_active(self) -> bool:
+    def open_menu(self) -> None:
+        self._set_screen(self.MENU_PLUGIN)
+
+    def launch(self, game_plugin_name: str) -> None:
+        self._set_screen(game_plugin_name)
+
+    def exit_to_normal(self) -> None:
+        self._set_screen(None)
+
+    def _set_screen(self, screen: Optional[str]) -> None:
         self._load(force=True)
-        self._active = not self._active
+        self._screen = screen
         self._steer = None
+        self._confirm = False
         self._save()
-        return self._active
 
     def request_steer(self, direction: str) -> None:
         assert direction in ("left", "right")
@@ -62,6 +77,20 @@ class GameMode:
             return direction
         return None
 
+    def request_confirm(self) -> None:
+        self._load(force=True)
+        self._confirm = True
+        self._save()
+
+    def consume_confirm(self) -> bool:
+        """Return True (once) if confirm was requested, clearing it as a side effect."""
+        self._maybe_reload()
+        if self._confirm:
+            self._confirm = False
+            self._save()
+            return True
+        return False
+
     def _maybe_reload(self) -> None:
         now = time.time()
         if now - self._last_check < RELOAD_CHECK_INTERVAL:
@@ -74,8 +103,9 @@ class GameMode:
             mtime = self.path.stat().st_mtime
         except OSError:
             if force:
-                self._active = False
+                self._screen = None
                 self._steer = None
+                self._confirm = False
             return
 
         if not force and mtime == self._mtime:
@@ -84,8 +114,9 @@ class GameMode:
         try:
             with open(self.path) as f:
                 data = json.load(f)
-            self._active = data.get("active", False)
+            self._screen = data.get("screen")
             self._steer = data.get("steer")
+            self._confirm = data.get("confirm", False)
             self._mtime = mtime
         except (json.JSONDecodeError, OSError) as e:
             LOGGER.warning("Failed to load game mode state from %s: %s", self.path, e)
@@ -93,7 +124,7 @@ class GameMode:
     def _save(self) -> None:
         try:
             with open(self.path, "w") as f:
-                json.dump({"active": self._active, "steer": self._steer}, f, indent=2)
+                json.dump({"screen": self._screen, "steer": self._steer, "confirm": self._confirm}, f, indent=2)
                 f.write("\n")
             # Both the display and keypad listener write this file as root (systemd
             # User=root), but manual SSH/CLI use (toggle_rotation.py) runs as program27

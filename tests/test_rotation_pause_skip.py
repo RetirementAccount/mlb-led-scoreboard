@@ -22,7 +22,7 @@ class FakeGameMode:
     def __init__(self, active=False):
         self._active = active
 
-    def is_active(self):
+    def is_in_game_area(self):
         return self._active
 
 

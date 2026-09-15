@@ -10,11 +10,12 @@ Key mapping (keyboard side):
   0 reset every category back on
   Up arrow    toggle pause (freezes whatever's currently showing, ignoring its timer)
   Right arrow skip: end the current screen now, advance to the next -- works even while paused
-  G           toggle the toddler racer game mode on/off (see data/game_mode.py)
+  G           open the game menu (or, if already in the game area, exit back to the ticker)
+  F           confirm a menu selection (see data/game_mode.py, game_menu plugin)
 
 Mouse-button side (the keypad's touchpad click buttons, labeled L/R on this unit):
-  Left click  steer the racer car left  (only has an effect while game mode is on)
-  Right click steer the racer car right
+  Left click  in the menu: move the selection left; in a game: whatever that game uses it for
+  Right click same, other direction
 
 Requires the `evdev` package (Linux only -- see requirements.rpi.txt) and read access
 to /dev/input/event*, which is why this runs as root in its systemd unit.
@@ -57,6 +58,7 @@ REQUIRED_KEYBOARD_KEYS = {
     ecodes.KEY_UP,
     ecodes.KEY_RIGHT,
     ecodes.KEY_G,
+    ecodes.KEY_F,
 }
 REQUIRED_MOUSE_BUTTONS = {ecodes.BTN_LEFT, ecodes.BTN_RIGHT}
 
@@ -74,7 +76,8 @@ TOGGLE_KEY_MAP = {
 RESET_KEY = ecodes.KEY_0
 PAUSE_KEY = ecodes.KEY_UP
 SKIP_KEY = ecodes.KEY_RIGHT
-GAME_MODE_KEY = ecodes.KEY_G
+GAME_AREA_KEY = ecodes.KEY_G
+CONFIRM_KEY = ecodes.KEY_F
 
 
 def find_keyboard_device() -> "InputDevice | None":
@@ -109,9 +112,15 @@ def handle_keyboard_event(event, toggles: RotationToggles, control: RotationCont
     elif event.code == SKIP_KEY:
         control.request_skip()
         LOGGER.info("Skip requested")
-    elif event.code == GAME_MODE_KEY:
-        active = game_mode.toggle_active()
-        LOGGER.info("Game mode %s", "ON" if active else "off")
+    elif event.code == GAME_AREA_KEY:
+        if game_mode.is_in_game_area():
+            game_mode.exit_to_normal()
+            LOGGER.info("Exited game area")
+        else:
+            game_mode.open_menu()
+            LOGGER.info("Game menu opened")
+    elif event.code == CONFIRM_KEY:
+        game_mode.request_confirm()
     elif event.code in TOGGLE_KEY_MAP:
         kind = TOGGLE_KEY_MAP[event.code]
         new_state = not toggles.is_enabled(kind)

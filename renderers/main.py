@@ -22,7 +22,6 @@ from renderers.games import pregame as pregamerender
 from renderers.games import teams
 
 CONTROL_POLL_INTERVAL = 0.05  # seconds -- see __draw_plugin_screen
-GAME_MODE_PLUGIN = "racer"  # bullpen plugin name shown exclusively while data.game_mode is active
 
 
 class MainRenderer:
@@ -38,15 +37,16 @@ class MainRenderer:
 
     def render(self) -> NoReturn:
         while True:
-            if self.data.game_mode.is_active():
-                if GAME_MODE_PLUGIN not in self.plugins:
-                    LOGGER.warning("Game mode is active but plugin '%s' isn't installed -- turning it off", GAME_MODE_PLUGIN)
-                    self.data.game_mode.set_active(False)
+            if screen := self.data.game_mode.current_screen():
+                if screen not in self.plugins:
+                    LOGGER.warning("Game area wants plugin '%s' but it isn't installed -- exiting to normal", screen)
+                    self.data.game_mode.exit_to_normal()
                     continue
-                # Exclusive: bypasses the normal rotation entirely while active, rather
-                # than being one more timed screen in it -- a game needs continuous
-                # player-driven rendering, not a timed turn.
-                self.__draw_plugin_screen(GAME_MODE_PLUGIN, self.data.game_mode.is_active)
+                # Exclusive: bypasses the normal rotation entirely while in the game
+                # area (whether showing the menu or an actual game), rather than being
+                # one more timed screen in it -- continuous player-driven rendering
+                # doesn't fit the "show for N seconds" rotation model.
+                self.__draw_plugin_screen(screen, self.data.game_mode.is_in_game_area)
                 continue
 
             drew_anything = False
@@ -73,15 +73,15 @@ class MainRenderer:
     def __render_games(self):
         seen_games = set()
         while True:
-            if self.data.game_mode.is_active():
+            if self.data.game_mode.is_in_game_area():
                 # Ending the current game's own display loop (via with_pause_and_skip
                 # below) isn't enough on its own: this outer loop would otherwise just
                 # immediately fetch the next game and try again, with no sleep and no
                 # way out if self.data.games.next() keeps returning the same stale game
                 # (a real possibility -- see the DoubleBuffer note below) -- a tight
                 # infinite spin that never reaches render()'s top-level dispatch to the
-                # racer plugin, and looks exactly like a frozen display. Confirmed on
-                # real hardware: pressing G to enter game mode just froze the current
+                # game area, and looks exactly like a frozen display. Confirmed on real
+                # hardware: pressing G to enter the game area just froze the current
                 # MLB frame instead of switching.
                 return
 
@@ -291,11 +291,11 @@ def any_of(*conds) -> Callable[[], bool]:
 
 
 def with_pause_and_skip(data: Data, base_cond: Callable[[], bool]) -> Callable[[], bool]:
-    """Wrap a screen's display condition with live pause/skip/game-mode control.
+    """Wrap a screen's display condition with live pause/skip/game-area control.
 
-    Game mode turning on always wins first, ending the current screen immediately so
-    control bubbles back up to render()'s top-level dispatch to the racer plugin --
-    without this, flipping game mode on wouldn't take effect until whatever's
+    Entering the game area (menu or any game) always wins first, ending the current
+    screen immediately so control bubbles back up to render()'s top-level dispatch --
+    without this, opening the game area wouldn't take effect until whatever's
     currently showing would have ended on its own (up to its full timer duration).
     A skip request wins next (even while paused), ending the current screen right
     now. Otherwise, while paused the screen is held indefinitely -- base_cond (its
@@ -303,7 +303,7 @@ def with_pause_and_skip(data: Data, base_cond: Callable[[], bool]) -> Callable[[
     """
 
     def cond():
-        if data.game_mode.is_active():
+        if data.game_mode.is_in_game_area():
             return False
         if data.rotation_control.consume_skip():
             LOGGER.debug("Skip consumed, ending current screen")

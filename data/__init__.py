@@ -18,6 +18,11 @@ class Data:
         self.rotation_toggles = RotationToggles()
         self.rotation_control = RotationControl()
         self.game_mode = GameMode()
+        # Eric's preference: the display should always come up showing the normal
+        # ticker (and MLB's startup logo) on boot/restart, never resume straight into
+        # a game or the menu just because that's what game_mode.json happened to have
+        # persisted from before a reboot or service restart.
+        self.game_mode.exit_to_normal()
 
         # get schedule
         self.schedule: Schedule = Schedule(config)

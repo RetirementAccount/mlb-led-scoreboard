@@ -16,26 +16,42 @@ class TestGameMode(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
-    def test_defaults_to_inactive_no_steer(self):
+    def test_defaults_to_normal_no_steer_no_confirm(self):
         game_mode = GameMode(self.path)
-        self.assertFalse(game_mode.is_active())
+        self.assertIsNone(game_mode.current_screen())
+        self.assertFalse(game_mode.is_in_game_area())
         self.assertIsNone(game_mode.consume_steer())
+        self.assertFalse(game_mode.consume_confirm())
 
-    def test_set_active_persists(self):
+    def test_open_menu_shows_the_menu_plugin(self):
         game_mode = GameMode(self.path)
-        game_mode.set_active(True)
-        self.assertTrue(game_mode.is_active())
+        game_mode.open_menu()
+        self.assertEqual(game_mode.current_screen(), GameMode.MENU_PLUGIN)
+        self.assertTrue(game_mode.is_in_game_area())
 
-        with open(self.path) as f:
-            saved = json.load(f)
-        self.assertTrue(saved["active"])
-
-    def test_toggle_active_flips_and_returns_new_state(self):
+    def test_launch_shows_the_named_game(self):
         game_mode = GameMode(self.path)
-        self.assertTrue(game_mode.toggle_active())
-        self.assertTrue(game_mode.is_active())
-        self.assertFalse(game_mode.toggle_active())
-        self.assertFalse(game_mode.is_active())
+        game_mode.launch("racer")
+        self.assertEqual(game_mode.current_screen(), "racer")
+        self.assertTrue(game_mode.is_in_game_area())
+
+    def test_exit_to_normal_clears_the_screen(self):
+        game_mode = GameMode(self.path)
+        game_mode.launch("racer")
+        game_mode.exit_to_normal()
+        self.assertIsNone(game_mode.current_screen())
+        self.assertFalse(game_mode.is_in_game_area())
+
+    def test_changing_screen_clears_any_pending_steer_and_confirm(self):
+        game_mode = GameMode(self.path)
+        game_mode.open_menu()
+        game_mode.request_steer("right")
+        game_mode.request_confirm()
+
+        game_mode.launch("racer")
+
+        self.assertIsNone(game_mode.consume_steer())
+        self.assertFalse(game_mode.consume_confirm())
 
     def test_steer_is_one_shot(self):
         game_mode = GameMode(self.path)
@@ -44,20 +60,20 @@ class TestGameMode(unittest.TestCase):
         self.assertEqual(game_mode.consume_steer(), "left")
         self.assertIsNone(game_mode.consume_steer())
 
-    def test_set_active_clears_any_pending_steer(self):
+    def test_confirm_is_one_shot(self):
         game_mode = GameMode(self.path)
-        game_mode.request_steer("right")
-        game_mode.set_active(True)
+        game_mode.request_confirm()
 
-        self.assertIsNone(game_mode.consume_steer())
+        self.assertTrue(game_mode.consume_confirm())
+        self.assertFalse(game_mode.consume_confirm())
 
     def test_a_second_instance_picks_up_persisted_state(self):
         game_mode = GameMode(self.path)
-        game_mode.set_active(True)
+        game_mode.launch("racer")
         game_mode.request_steer("left")
 
         other = GameMode(self.path)
-        self.assertTrue(other.is_active())
+        self.assertEqual(other.current_screen(), "racer")
         self.assertEqual(other.consume_steer(), "left")
 
     def test_rapid_steer_requests_from_separate_instances_are_not_lost(self):
@@ -76,15 +92,15 @@ class TestGameMode(unittest.TestCase):
 
     def test_external_file_change_is_picked_up_after_reload_interval(self):
         game_mode = GameMode(self.path)
-        self.assertFalse(game_mode.is_active())
+        self.assertIsNone(game_mode.current_screen())
 
         with open(self.path, "w") as f:
-            json.dump({"active": True, "steer": None}, f)
+            json.dump({"screen": "racer", "steer": None, "confirm": False}, f)
         bumped = (self.path.stat().st_mtime or time.time()) + 5
         os.utime(self.path, (bumped, bumped))
 
         game_mode._last_check = 0
-        self.assertTrue(game_mode.is_active())
+        self.assertEqual(game_mode.current_screen(), "racer")
 
 
 if __name__ == "__main__":

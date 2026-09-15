@@ -24,7 +24,7 @@ def make_renderer(tmp_path: Path) -> Renderer:
     # GameMode at a throwaway file instead, so tests never touch production state
     # or race with an actual running display/keypad listener.
     renderer._game_mode.path = tmp_path / "game_mode.json"
-    renderer._game_mode._active = False
+    renderer._game_mode._screen = None
     renderer._game_mode._steer = None
     return renderer
 
