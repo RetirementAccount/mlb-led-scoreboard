@@ -10,7 +10,7 @@ Key mapping (keyboard side):
   0 reset every category back on
   Up arrow    toggle pause (freezes whatever's currently showing, ignoring its timer)
   Right arrow skip: end the current screen now, advance to the next -- works even while paused
-  G           open the game menu (or, if already in the game area, exit back to the ticker)
+  G           "back one step": ticker -> menu; a game -> menu; menu -> ticker
   Enter       confirm a menu selection (see data/game_mode.py, game_menu plugin)
 
 Mouse-button side (the keypad's touchpad click buttons, labeled L/R on this unit):
@@ -116,12 +116,20 @@ def handle_keyboard_event(event, toggles: RotationToggles, control: RotationCont
         control.request_skip()
         LOGGER.info("Skip requested")
     elif event.code == GAME_AREA_KEY:
-        if game_mode.is_in_game_area():
+        # A "back one step" button rather than a hard toggle: ticker -> menu ->
+        # (any game) -> menu -> ticker. Without this, G from inside a game dropped
+        # all the way to the ticker, and getting back to the menu needed a second
+        # G press -- annoying when you just want to pick a different game.
+        screen = game_mode.current_screen()
+        if screen is None:
+            game_mode.open_menu()
+            LOGGER.info("Game menu opened")
+        elif screen == GameMode.MENU_PLUGIN:
             game_mode.exit_to_normal()
             LOGGER.info("Exited game area")
         else:
             game_mode.open_menu()
-            LOGGER.info("Game menu opened")
+            LOGGER.info("Returned to game menu from %s", screen)
     elif event.code == CONFIRM_KEY:
         game_mode.request_confirm()
     elif event.code in TOGGLE_KEY_MAP:
