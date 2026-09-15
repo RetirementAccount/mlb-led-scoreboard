@@ -67,6 +67,34 @@ class TestGameMode(unittest.TestCase):
         self.assertTrue(game_mode.consume_confirm())
         self.assertFalse(game_mode.consume_confirm())
 
+    def test_held_direction_defaults_to_none(self):
+        game_mode = GameMode(self.path)
+        self.assertIsNone(game_mode.held_direction())
+
+    def test_held_direction_reflects_the_button_currently_down(self):
+        game_mode = GameMode(self.path)
+        game_mode.set_steer_held("left", True)
+        self.assertEqual(game_mode.held_direction(), "left")
+
+        game_mode.set_steer_held("left", False)
+        self.assertIsNone(game_mode.held_direction())
+
+    def test_held_direction_is_none_if_both_buttons_are_down(self):
+        # An unusual physical state (both buttons pressed at once), but should
+        # resolve to "no clear direction" rather than picking one arbitrarily.
+        game_mode = GameMode(self.path)
+        game_mode.set_steer_held("left", True)
+        game_mode.set_steer_held("right", True)
+        self.assertIsNone(game_mode.held_direction())
+
+    def test_held_state_is_shared_across_instances(self):
+        listener = GameMode(self.path)
+        display = GameMode(self.path)
+
+        listener.set_steer_held("right", True)
+        display._last_check = 0
+        self.assertEqual(display.held_direction(), "right")
+
     def test_a_second_instance_picks_up_persisted_state(self):
         game_mode = GameMode(self.path)
         game_mode.launch("racer")

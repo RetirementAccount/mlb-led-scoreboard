@@ -35,6 +35,8 @@ def make_renderer(tmp_path: Path) -> Renderer:
     renderer._game_mode._screen = None
     renderer._game_mode._steer = None
     renderer._game_mode._confirm = False
+    renderer._game_mode._steer_held_left = False
+    renderer._game_mode._steer_held_right = False
     return renderer
 
 
@@ -58,15 +60,31 @@ class TestFruitCatcherGameplay(unittest.TestCase):
         self.assertFalse(self.renderer.game_over)
 
     def test_steer_clamps_at_playfield_edges(self):
+        # The basket moves continuously while the button is held (see
+        # data/game_mode.py's held_direction()), so a single set_steer_held call
+        # covers all 50 frames below -- no repeated taps needed.
+        self.renderer._game_mode.set_steer_held("left", True)
         for _ in range(50):
-            self.renderer._game_mode.request_steer("left")
             self.renderer._consume_input()
         self.assertEqual(self.renderer.catcher_x, 0)
 
+        self.renderer._game_mode.set_steer_held("left", False)
+        self.renderer._game_mode.set_steer_held("right", True)
         for _ in range(50):
-            self.renderer._game_mode.request_steer("right")
             self.renderer._consume_input()
         self.assertEqual(self.renderer.catcher_x, self.renderer.width - BASKET_TOP_WIDTH)
+
+    def test_catcher_moves_continuously_while_held_without_repeated_taps(self):
+        self.renderer._game_mode.set_steer_held("right", True)
+        start_x = self.renderer.catcher_x
+
+        self.renderer._consume_input()
+        after_one_frame = self.renderer.catcher_x
+        self.renderer._consume_input()
+        after_two_frames = self.renderer.catcher_x
+
+        self.assertGreater(after_one_frame, start_x)
+        self.assertGreater(after_two_frames, after_one_frame)
 
     def test_straight_object_falls_without_moving_horizontally(self):
         obj = make_object(x=10.0, pattern="straight")
@@ -131,7 +149,7 @@ class TestFruitCatcherGameplay(unittest.TestCase):
     def test_steer_is_ignored_during_the_hit_animation(self):
         self.renderer.hit_animation_frames_remaining = 5
         start_x = self.renderer.catcher_x
-        self.renderer._game_mode.request_steer("left")
+        self.renderer._game_mode.set_steer_held("left", True)
         self.renderer._consume_input()
         self.assertEqual(self.renderer.catcher_x, start_x)
 

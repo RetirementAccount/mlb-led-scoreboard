@@ -34,6 +34,8 @@ class GameMode:
         self._screen: Optional[str] = None
         self._steer: Optional[str] = None
         self._confirm = False
+        self._steer_held_left = False
+        self._steer_held_right = False
         self._mtime: Optional[float] = None
         self._last_check = 0.0
         self._load(force=True)
@@ -77,6 +79,28 @@ class GameMode:
             return direction
         return None
 
+    def set_steer_held(self, direction: str, held: bool) -> None:
+        """Level-triggered companion to request_steer/consume_steer: tracks whether
+        the L/R button is currently physically down, for games that want smooth
+        continuous movement while held rather than one bump per tap. The menu still
+        uses the one-shot request_steer/consume_steer pair -- one move per click."""
+        assert direction in ("left", "right")
+        self._load(force=True)
+        if direction == "left":
+            self._steer_held_left = held
+        else:
+            self._steer_held_right = held
+        self._save()
+
+    def held_direction(self) -> Optional[str]:
+        """The currently-held direction, or None if neither/both buttons are down."""
+        self._maybe_reload()
+        if self._steer_held_left and not self._steer_held_right:
+            return "left"
+        if self._steer_held_right and not self._steer_held_left:
+            return "right"
+        return None
+
     def request_confirm(self) -> None:
         self._load(force=True)
         self._confirm = True
@@ -106,6 +130,8 @@ class GameMode:
                 self._screen = None
                 self._steer = None
                 self._confirm = False
+                self._steer_held_left = False
+                self._steer_held_right = False
             return
 
         if not force and mtime == self._mtime:
@@ -117,6 +143,8 @@ class GameMode:
             self._screen = data.get("screen")
             self._steer = data.get("steer")
             self._confirm = data.get("confirm", False)
+            self._steer_held_left = data.get("steer_held_left", False)
+            self._steer_held_right = data.get("steer_held_right", False)
             self._mtime = mtime
         except (json.JSONDecodeError, OSError) as e:
             LOGGER.warning("Failed to load game mode state from %s: %s", self.path, e)
@@ -124,7 +152,17 @@ class GameMode:
     def _save(self) -> None:
         try:
             with open(self.path, "w") as f:
-                json.dump({"screen": self._screen, "steer": self._steer, "confirm": self._confirm}, f, indent=2)
+                json.dump(
+                    {
+                        "screen": self._screen,
+                        "steer": self._steer,
+                        "confirm": self._confirm,
+                        "steer_held_left": self._steer_held_left,
+                        "steer_held_right": self._steer_held_right,
+                    },
+                    f,
+                    indent=2,
+                )
                 f.write("\n")
             # Both the display and keypad listener write this file as root (systemd
             # User=root), but manual SSH/CLI use (toggle_rotation.py) runs as program27

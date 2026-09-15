@@ -19,13 +19,19 @@ from .data import Data
 PLAYFIELD_TOP = 7  # reserve the top rows for the score/lives HUD, objects fall below this
 CATCHER_Y_MARGIN = 2
 
-BASKET_ROW_WIDTHS = (7, 7, 5, 3)  # top to bottom -- a simple tapered "basket" silhouette
+# Widened (was 7,7,5,3) so a stationary basket comfortably spans more than one
+# falling object's width -- catching feels too twitchy otherwise now that objects
+# are full 8x8 sprites.
+BASKET_ROW_WIDTHS = (14, 14, 11, 7)  # top to bottom -- a simple tapered "basket" silhouette
 BASKET_TOP_WIDTH = BASKET_ROW_WIDTHS[0]
 BASKET_HEIGHT = len(BASKET_ROW_WIDTHS)
 SPIN_CYCLE_FRAMES = 8  # see _spin_scale()
 
-OBJECT_WIDTH = 3
-OBJECT_HEIGHT = 4  # 1px accent row (stem/leaf/fuse) on top of a 3x3 body
+# Matches the 8x8 sprite art Eric supplied -- the hitbox used to be a much smaller
+# 3x4 placeholder box left over from the color-blob era, which made objects look
+# caught (or missed) well before/after their sprite visually touched the basket.
+OBJECT_WIDTH = 8
+OBJECT_HEIGHT = 8
 
 PIP_SIZE = 2
 PIP_SPACING = 3
@@ -129,8 +135,13 @@ class Renderer(api.PluginRenderer[Data]):
         self.game_over = False
 
     def _consume_input(self) -> None:
-        direction = self._game_mode.consume_steer()
+        # consume_steer() is drained unconditionally even though the basket now moves
+        # from held_direction() instead -- it's a one-shot flag shared with the menu,
+        # and leaving it unread here would make it appear (falsely) still pending the
+        # next time the menu is opened.
+        self._game_mode.consume_steer()
         confirmed = self._game_mode.consume_confirm()
+        direction = self._game_mode.held_direction()
 
         if self.game_over:
             if confirmed:

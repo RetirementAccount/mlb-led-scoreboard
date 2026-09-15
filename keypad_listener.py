@@ -14,8 +14,11 @@ Key mapping (keyboard side):
   F           confirm a menu selection (see data/game_mode.py, game_menu plugin)
 
 Mouse-button side (the keypad's touchpad click buttons, labeled L/R on this unit):
-  Left click  in the menu: move the selection left; in a game: whatever that game uses it for
+  Left click  in the menu: move the selection left one slot per click
   Right click same, other direction
+  Holding either button down also updates a live "held" state (data/game_mode.py's
+  set_steer_held/held_direction) that a game can poll every frame for continuous
+  movement while held, instead of needing repeated taps -- see fruit_catcher.
 
 Requires the `evdev` package (Linux only -- see requirements.rpi.txt) and read access
 to /dev/input/event*, which is why this runs as root in its systemd unit.
@@ -129,12 +132,18 @@ def handle_keyboard_event(event, toggles: RotationToggles, control: RotationCont
 
 
 def handle_mouse_event(event, game_mode: GameMode) -> None:
-    if event.value != 1:  # button down only
-        return
     if event.code == ecodes.BTN_LEFT:
-        game_mode.request_steer("left")
+        direction = "left"
     elif event.code == ecodes.BTN_RIGHT:
-        game_mode.request_steer("right")
+        direction = "right"
+    else:
+        return
+
+    if event.value == 1:  # button down
+        game_mode.request_steer(direction)  # one-shot: the menu moves one slot per click
+        game_mode.set_steer_held(direction, True)  # level: games can move continuously while held
+    elif event.value == 0:  # button up
+        game_mode.set_steer_held(direction, False)
 
 
 def main() -> None:
