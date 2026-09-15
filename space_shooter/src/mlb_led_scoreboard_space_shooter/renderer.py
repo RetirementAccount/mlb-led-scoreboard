@@ -48,6 +48,12 @@ GUN_LANES = {
 }
 DIAGONAL_BULLET_DY = 1  # pixels/frame vertical component for level 4's bouncing dots
 
+# Multi-hit enemies alone weren't enough -- the wide/rapid coverage at levels 3-4
+# still trivialized the game, so this also cuts the fire rate by 1/3 (fires 1.5x
+# less often) once the gun reaches that point. Levels 1-2 fire at the base rate.
+FIRE_RATE_NERF_GUN_LEVEL = 3
+FIRE_RATE_NERF_MULTIPLIER = 1.5
+
 # Eric's ship.png has a single orange pixel on its back row that he wants to pulse
 # orange -> yellow -> red like a rocket engine, the same color-cycling trick
 # fruit_catcher uses for its bomb's fuse spark (see that game's FUSE_SPARK_CYCLE_RGB).
@@ -72,7 +78,6 @@ ENEMY_RGB = (200, 30, 200)
 ENEMY_ACCENT_RGB = (255, 220, 255)
 PICKUP_RGB = (255, 200, 0)
 BULLET_RGB = (255, 255, 255)
-SCORE_RGB = (255, 255, 255)
 GAME_OVER_RGB = (255, 60, 60)
 PIP_RGB = (0, 200, 255)
 PIP_EMPTY_RGB = (50, 50, 50)
@@ -106,7 +111,6 @@ class Renderer(api.PluginRenderer[Data]):
         from data.game_mode import GameMode
 
         self.config = config
-        self.status_font = layout.font("shooter.status")
         self.title_font = layout.font("shooter.title")
         self.width = layout.width
         self.height = layout.height
@@ -278,8 +282,13 @@ class Renderer(api.PluginRenderer[Data]):
 
         if self.frame_count % self.config.spawn_interval_frames == 0:
             self._spawn_entity()
-        if self.frame_count % self.config.fire_interval_frames == 0:
+        if self.frame_count % self._current_fire_interval() == 0:
             self._fire()
+
+    def _current_fire_interval(self) -> int:
+        if self.gun_level >= FIRE_RATE_NERF_GUN_LEVEL:
+            return round(self.config.fire_interval_frames * FIRE_RATE_NERF_MULTIPLIER)
+        return self.config.fire_interval_frames
 
     def _move_stars(self) -> None:
         for star in self.stars:
@@ -399,9 +408,8 @@ class Renderer(api.PluginRenderer[Data]):
             # Blink every other frame while briefly invulnerable after a hit.
             self._draw_ship(canvas, graphics, PLAYER_X, self.player_y)
 
-        score_color = graphics.Color(*SCORE_RGB)
-        graphics.DrawText(canvas, self.status_font["font"], 1, self.status_font["size"]["height"], score_color, str(self.score))
-
+        # Score is still tracked (self.score) for a possible future score-total
+        # screen, but per Eric's request it's no longer shown during play.
         self._draw_lives(canvas, graphics)
 
         if self.game_over:

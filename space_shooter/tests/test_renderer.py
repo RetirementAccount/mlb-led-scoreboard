@@ -9,6 +9,8 @@ from mlb_led_scoreboard_space_shooter.renderer import (
     ENEMY_WIDTH,
     ENGINE_FLAME_CYCLE_RGB,
     ENGINE_FLAME_FRAMES_PER_COLOR,
+    FIRE_RATE_NERF_GUN_LEVEL,
+    FIRE_RATE_NERF_MULTIPLIER,
     GUN_LANES,
     LIGHT_CHASE_FRAMES_PER_STEP,
     MAX_GUN_LEVEL,
@@ -105,6 +107,18 @@ class TestSpaceShooterGameplay(unittest.TestCase):
         for _ in range(self.renderer.config.fire_interval_frames):
             self.renderer._advance()
         self.assertGreater(len(self.renderer.bullets), 0)
+
+    def test_fire_rate_is_unchanged_below_the_nerf_gun_level(self):
+        self.renderer.gun_level = FIRE_RATE_NERF_GUN_LEVEL - 1
+        self.assertEqual(self.renderer._current_fire_interval(), self.renderer.config.fire_interval_frames)
+
+    def test_fire_rate_is_nerfed_by_a_third_at_and_above_the_nerf_gun_level(self):
+        # Eric's feedback: multi-hit enemies alone weren't enough once the gun got
+        # wide/fast -- this also slows the fire rate by 1/3 from that level up.
+        self.renderer.gun_level = FIRE_RATE_NERF_GUN_LEVEL
+        expected = round(self.renderer.config.fire_interval_frames * FIRE_RATE_NERF_MULTIPLIER)
+        self.assertEqual(self.renderer._current_fire_interval(), expected)
+        self.assertGreater(expected, self.renderer.config.fire_interval_frames)
 
     def test_bullet_destroys_a_one_hit_enemy_and_scores_points(self):
         self.renderer.config.enemy_max_hits = 1
