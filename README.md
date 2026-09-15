@@ -45,6 +45,7 @@ If you'd like to see support for another set of board dimensions, or have design
   * [Running on Other Platforms](#running-on-other-platforms)
   * [Configuration](#configuration)
   * [Controlling the Display (Screen Rotation)](#controlling-the-display-screen-rotation)
+  * [Physical Keypad Control (this fork)](#physical-keypad-control-this-fork)
   * [Synchronizing with Broadcasts](#synchronizing-with-broadcasts)
   * [Additional Features](#additional-features)
   * [Command Line Flags](#command-line-flags)
@@ -368,6 +369,41 @@ For example, here's a config that:
 These rules are powerful but we know they can be confusing. Feel free to reach out on our Discord if you
 want help crafting something specific!
 
+
+### Physical Keypad Control (this fork)
+
+This fork adds live control from a small USB/RF wireless keypad (tested with a Rii i4 mini keyboard, which combines a keyboard and a touchpad with physical L/R click buttons) — no SSH needed for day-to-day use. It runs as its own systemd service (`mlb-led-keypad.service`, see `systemd/`), independent of the display service, via `keypad_listener.py`.
+
+**Keyboard keys:**
+
+| Key | Action |
+| --- | --- |
+| `1`–`9` | Toggle a category on/off: MLB, NFL, NHL, NBA, NCAAF, NCAAB, EPL, News, Standings |
+| `0` | Reset — turn every category back on |
+| `Up` | Pause/resume whatever's currently showing (ignores its normal timer) |
+| `Right` | Skip: end the current screen now and advance to the next, even while paused |
+| `G` | Open the game menu, or step back one level if already in it (see below) |
+| `Enter` | Confirm a menu selection / a game's own use of confirm (e.g. restart after Game Over) |
+
+**Touchpad L/R click buttons:** move the game menu's cursor one slot per click, or steer a game's player object. Holding either button down moves continuously (not just one bump per click) for games that use it that way.
+
+**The game area:** pressing `G` opens a menu (`game_menu`) listing the available games — currently a toddler-friendly racer ("Racer") and a falling-fruit catcher ("Fruit Catch") — plus "Exit". `G` acts as a "back one step" button: from the normal ticker it opens the menu; from inside a game it returns to the menu (not all the way out); from the menu itself it exits back to the ticker. The game area always takes over the display exclusively while active, and the display always boots back into the normal ticker rotation regardless of what was left open before a restart.
+
+**Over SSH**, without physical hardware, every keypad action has an equivalent `./toggle_rotation.py` command:
+```
+./toggle_rotation.py                 # show current state of everything
+./toggle_rotation.py nhl off         # turn a category off -- one of: game (MLB), news,
+                                      # standings, nfl, nhl, nba, ncaaf, ncaab, epl
+./toggle_rotation.py --reset         # turn every category back on
+./toggle_rotation.py --pause         # freeze whatever's currently showing
+./toggle_rotation.py --resume        # let the rotation advance normally again
+./toggle_rotation.py --skip          # end the current screen now, advance to the next
+./toggle_rotation.py --menu          # open the game menu
+./toggle_rotation.py --exit-game     # back to normal rotation from the menu or a game
+./toggle_rotation.py --launch racer  # jump straight into a specific game, skipping the menu
+./toggle_rotation.py --confirm       # confirm the menu's current selection
+./toggle_rotation.py --steer left    # nudge left (menu cursor, or whatever a game uses it for)
+```
 
 ### Synchronizing with Broadcasts
 
