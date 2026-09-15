@@ -6,12 +6,13 @@ This doc captures where the project stands so Claude Code has full context witho
 
 A wall-mounted (eventually desk-optional) LED matrix sports ticker that rotates through multiple content types: MLB scores, other sports (NFL/NHL as later additions), news headlines, and eventually fun modes (crypto/Kalshi ticker, music visualizer/equalizer, retro mini-games, FitQuest stat display). Mode switching intended to eventually be controlled via a Stream Deck or macro pad over USB.
 
-## Current status (as of 2026-09-14) — read this first
+## Current status (as of 2026-09-15) — read this first
 
 - **Display and keypad control are both live, verified on real hardware, and running as persistent systemd services** on the Pi (`mlb-led-scoreboard.service`, `mlb-led-keypad.service`) — both `enabled`, so they auto-start on every boot with no manual steps.
 - **MLB** (built-in) **+ NFL/NHL/NBA/NCAAF/NCAAB/EPL** (`espn_sports/`) all rotate together, all showing real live data, using MLB-style colored team banner bars (real per-team ESPN colors), not plain text.
 - **Live rotation control**: any category (MLB, news, standings, any of the 6 sports) can be toggled on/off, and the current screen can be paused or skipped forward, either from the physical Rii i4 keypad or over SSH via `./toggle_rotation.py`. See the dated sections below for exact keys and the real bugs hit getting this reliable.
-- **Game area with a menu, built for a suite of simple games** (2026-09-14, see below) — `G` opens a game-select menu (`game_menu/`); L/R clicks move the cursor, `F` confirms. Currently lists one game, the toddler racer (`toddler_racer/`), plus "Exit". Adding a second game later is just another `bullpen` plugin plus one line in `game_menu`'s `AVAILABLE_GAMES` list — no other changes needed. The game area (menu or any game) always bypasses normal rotation exclusively, and the display always boots into normal rotation (MLB logo + ticker) regardless of what was left active before a restart.
+- **Game area with a menu, now a real two-game suite** (2026-09-14/15, see below) — `G` steps back one level (ticker → menu → whatever game you're in → menu → ticker); L/R clicks move the cursor or steer (now continuously while held, not one bump per tap); **Enter** confirms (switched from an earlier `F`). Lists `toddler_racer` ("Racer") and `fruit_catcher` ("Fruit Catch"), plus "Exit". Adding a further game is still just another `bullpen` plugin plus one line in `game_menu`'s `AVAILABLE_GAMES` list. The game area (menu or any game) always bypasses normal rotation exclusively, and the display always boots into normal rotation (MLB logo + ticker) regardless of what was left active before a restart.
+- Both games now share a real 3-life/Game-Over structure (see the dated sections below) — no longer the original "never-fail" toddler design. Both support optional custom pixel-art sprites (drop a same-named PNG into the plugin's `assets/` folder) with built-in procedural fallbacks so neither game depends on art existing.
 - **Not started yet**: crypto/Kalshi ticker (own `bullpen` plugin, not built — see the LEDMatrix comparison below for a possible shortcut), second panel (hardware wiring), physical mounting + diffusion acrylic install (acrylic ordered, not installed), hand-drawn team logos (auto-downloaded ones were tried and rejected as too blurry at this resolution).
 - **Known accepted tradeoff**: rapid skip-presses on MLB games can lag or briefly re-show the same game if pressed faster than the data thread can keep up (~0.5-1s per game); Eric's chosen to just pace presses rather than have a background agent bypass the underlying double-buffer. Plugin screens (news/standings/the 6 sports) don't have this limitation — skip is instant there.
 
@@ -213,6 +214,49 @@ Once the racer worked well, Eric wanted a whole suite of simple games rather tha
 
 **Boot behavior, per Eric's explicit ask**: `Data.__init__` now calls `self.game_mode.exit_to_normal()` right after constructing `GameMode()`, unconditionally. This guarantees the display always comes up showing the normal ticker (and MLB's startup logo) on every boot/restart, even if `game_mode.json` happened to have a game or the menu persisted from before — the game area is only ever entered by an explicit `G` press after boot, never resumed automatically.
 
+
+## Fruit Catch: a second game for the suite (2026-09-14)
+
+Eric wanted a second game alongside the racer: a falling-fruit catcher. Spec, verbatim in spirit: catch falling fruit with a basket, some fruit falls straight/diagonally/zigzag (worth 50/100/150 points), a bomb costs one of 3 lives, losing a life freezes play and spins the catcher first, Game Over text over the frozen playfield when the last life is lost. Built as its own `bullpen` plugin (`fruit_catcher/`, entry point `fruit_catcher`), added to `game_menu`'s `AVAILABLE_GAMES`.
+
+**Initial build**: basket is a tapered brown checkerboard-weave silhouette (per Eric's "bushel basket" spec); bomb chosen over other hazard ideas Eric considered. Fruit/bomb originally simple color-coded blobs (3x3 body + 1px accent), same "keep it simple" reasoning as the racer's cars and the earlier decision to reject auto-downloaded team logos. Life-loss "rotation" approximated as a horizontal squash-cycle on the basket (true rotation not feasible at this pixel budget) — this same tension resurfaced later for the racer's car (see below), where the eventual fix was a real 4-direction rotation instead.
+
+**Real-hardware feedback, several rounds, all fixed**:
+- Caught fruit/bombs were sliding behind the basket and off-screen instead of disappearing on contact — fixed by removing a caught object from the list the same frame, not waiting for it to fall past the bottom.
+- The bomb's near-black body was barely visible against the dark navy background — changed to steel gray with a highlight pixel.
+- Eric supplied real pixel art (8x8 PNGs: cherry/orange/apple/banana/bomb, later mango/pear/strawberry too) — added an optional sprite-override system (`assets/<name>.png`, alpha-composited blit, same technique `espn_sports` uses for team logos) with the color-blob rendering as an automatic fallback when no PNG is present. The 3 new fruits had to also be added to the game's `FRUITS` list, not just dropped in as image files, to actually become spawnable.
+- Hitbox was still the original 3x3 placeholder size after switching to 8x8 sprites, making catches feel like they triggered before/after the sprite visually touched the basket — resized to match (`OBJECT_WIDTH`/`HEIGHT` = 8).
+- Basket widened (7px → 14px top width) to comfortably span an 8px-wide falling object.
+- L/R held-button steering (see the shared `game_mode.held_direction()` mechanism below) replaced tap-to-move.
+- Fruit was spawning only a few rows below the top, giving little reaction time — now spawns fully off the top edge (`SPAWN_Y = -OBJECT_HEIGHT`) and scrolls into view.
+- Eric requested the bomb's yellow fuse spark actually animate — implemented as a color-swap keyed off "is this pixel yellow" (not a hardcoded coordinate), so it works on Eric's actual `bomb.png` regardless of exact layout, cycling yellow → orange → red → orange each frame.
+
+## Keypad: G as "back one step", confirm moved to Enter (2026-09-14/15)
+
+Two keypad refinements after the menu/suite generalization above:
+- **Confirm key switched from `F` to Enter** — `F` was originally picked just for being adjacent to `G`; Enter is the more conventional choice, so `CONFIRM_KEY`/`REQUIRED_KEYBOARD_KEYS` now reference `ecodes.KEY_ENTER`.
+- **`G` redefined as a "back one step" button** rather than a hard ticker/game-area toggle. Previously, `G` from inside any game dropped straight to the normal ticker, so switching games needed `G` (out) then `G` again (back into the menu) — annoying. Now: ticker → menu (open); a game → menu (`game_mode.open_menu()`, not `exit_to_normal()`); menu → ticker. Distinguishing "in the menu" from "in a game" just needed the existing `GameMode.MENU_PLUGIN` constant. `toggle_rotation.py`'s `--menu`/`--exit-game`/`--launch` flags are explicit actions and were unaffected by this change.
+
+## Toddler racer overhaul: lives, hazards, real stakes (2026-09-14/15)
+
+Starting from the original never-fail racer (see the 2026-09-14 section above), Eric asked for a long sequence of changes that together turned it into a real arcade-style game. Each was built, tested locally (PIL-rendered previews + a full unit test suite), then batched for deployment rather than pushed one at a time per Eric's explicit request partway through.
+
+**Controls & feel**:
+- L/R held-button steering (see below) instead of tap-per-pixel-step.
+- Player car redesigned as a 6-row rainbow stripe (red/orange/yellow/green/blue/violet, top to bottom) per a request from Eric's toddler — `CAR_HEIGHT` is derived from `len(CAR_STRIPE_COLORS_RGB)` so the two can't drift apart. Opponent "cars" now spawn as a single random solid color from that same 6-color list, rather than one fixed color.
+- Road-dash scroll speed doubled relative to the obstacle fall speed (`DASH_SPEED_MULTIPLIER = 2`) — previously both moved at the same 1px/frame, which made opponents look stationary relative to the road instead of racing past.
+
+**Life system, mirroring `fruit_catcher`'s mechanism**: 3 lives, colliding with a car costs one and starts a hit animation; a Game Over overlay (identical style/text/color to `fruit_catcher`'s) shows after the last life, restarted via confirm (Enter). Passing a car safely now scores points (+10) instead of catching being the point-scoring action — a real inversion from the original design once crashing became the bad outcome. Life indicator: pink hearts, bottom-left, built-in 5x5 placeholder shape plus an optional `assets/heart.png` override (Eric supplied real art same-session). Per Eric's exact spec, hearts represent **lives in reserve only** — starting_lives=3 shows 2 hearts, not 3, since the first life is already active and un-represented; 0 hearts on the last life.
+
+**Oil patch hazard**: a second obstacle type (Eric supplied `assets/oil.png`, 5x5) that triggers the same spin-out animation as a crash but costs no life (-20 points instead) and only locks steering rather than fully freezing the world — the road and every other obstacle keep moving normally underneath a spinning car, unlike a car collision which still pauses everything (`self.freeze_world`, set per-collision-type). Oil falls at the road's scroll speed rather than the car-obstacle speed, since it's painted on the road surface rather than being an independently moving thing.
+
+**Scoring, per Eric's exact point spec**: car passed safely +10, oil patch hit -20, car collision (lost life) -50; oil grants nothing for a safe pass, only penalizes a hit. Not floored at zero.
+
+**Two hardware-feedback bugs on the spin/freeze animation, both fixed**:
+- The road dashes kept scrolling during a car-crash freeze, so only the car looked stopped, not the whole scene — cause was `frame_count` (which drives the dash-scroll position) incrementing every frame regardless of freeze state; moved the increment to after the freeze check.
+- The original spin animation was a symmetric width-squash (full width → thin sliver → full width), which Eric described as looking like "a cylinder spinning on its long axis" rather than a car spinning out. Replaced with a real 4-direction rotation (`_spin_state`/`_draw_spinning_car`): the car's footprint transposes width↔height and the rainbow stripe order flips so the red "nose" end always faces the direction the car is currently pointed (north/east/south/west, two full cycles). Tires were initially left out of the spin frames entirely (an oversight, not intentional) and were added back in a follow-up fix, rotating along with the body via a new `vertical` flag on the shared `_draw_tires`.
+
+**Shared mechanism new this session, used by both games**: `data/game_mode.py` gained a level-triggered companion to the existing one-shot `steer`/`confirm` signals — `set_steer_held(direction, held)` / `held_direction()`, two booleans persisted in the same `game_mode.json`. `keypad_listener.py` now handles mouse button-**up** events too (previously only button-down), so both games can move their player object continuously for as long as L/R stays held, while the menu still moves its cursor one slot per discrete click via the original one-shot path.
 
 ## Working conventions to carry over
 
