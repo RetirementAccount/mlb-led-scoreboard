@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 # missing one has zero penalty -- there is no lose condition by design.
 ROAD_MARGIN_FRACTION = 0.2  # road spans the middle (1 - 2*margin) of the panel width
 CAR_WIDTH = 3  # the car's body -- vertically oriented (taller than wide), tires drawn outside this
-CAR_HEIGHT = 6
 TIRE_WIDTH = 1
 TIRE_HEIGHT = 2
 CAR_Y_MARGIN = 2  # pixels between the car and the bottom edge
@@ -28,11 +27,23 @@ DASH_PERIOD = 6
 GRASS_RGB = (20, 90, 20)
 ROAD_RGB = (50, 50, 50)
 DASH_RGB = (230, 230, 230)
-CAR_RGB = (230, 30, 30)
 TIRE_RGB = (0, 0, 0)  # was (40,40,40), nearly identical to ROAD_RGB (50,50,50) -- invisible against it
 OBSTACLE_RGB = (240, 200, 20)
 FLASH_RGB = (255, 255, 255)
 SCORE_RGB = (255, 255, 255)
+
+# Eric's toddler requested a rainbow-striped car -- one row per hue, most-primary
+# version of each, top to bottom. This also sets CAR_HEIGHT (one row per stripe),
+# replacing the old flat CAR_RGB fill; obstacles keep their own solid OBSTACLE_RGB
+# and OBSTACLE_HEIGHT unchanged.
+CAR_STRIPE_COLORS_RGB = [
+    (255, 0, 0),  # red
+    (255, 255, 0),  # yellow
+    (0, 200, 0),  # green
+    (0, 0, 255),  # blue
+    (148, 0, 211),  # violet
+]
+CAR_HEIGHT = len(CAR_STRIPE_COLORS_RGB)
 
 
 class Renderer(api.PluginRenderer[Data]):
@@ -77,7 +88,12 @@ class Renderer(api.PluginRenderer[Data]):
         self.flash_frames_remaining = 0
 
     def _consume_steer(self) -> None:
-        direction = self._game_mode.consume_steer()
+        # consume_steer() is drained unconditionally even though the car now moves
+        # from held_direction() instead -- it's a one-shot flag shared with the menu
+        # (see fruit_catcher's identical reasoning), and leaving it unread here would
+        # make it appear (falsely) still pending the next time the menu is opened.
+        self._game_mode.consume_steer()
+        direction = self._game_mode.held_direction()
         if direction == "left":
             self.car_x = max(self.road_left, self.car_x - self.config.steer_step)
         elif direction == "right":
@@ -137,9 +153,10 @@ class Renderer(api.PluginRenderer[Data]):
             self._fill_rect(canvas, graphics, obstacle["x"], obstacle_y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT, obstacle_color)
             self._draw_tires(canvas, graphics, obstacle["x"], obstacle_y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT)
 
-        car_color = graphics.Color(*CAR_RGB)
         car_y = self.height - CAR_Y_MARGIN - CAR_HEIGHT
-        self._fill_rect(canvas, graphics, self.car_x, car_y, CAR_WIDTH, CAR_HEIGHT, car_color)
+        for row, rgb in enumerate(CAR_STRIPE_COLORS_RGB):
+            stripe_color = graphics.Color(*rgb)
+            graphics.DrawLine(canvas, self.car_x, car_y + row, self.car_x + CAR_WIDTH - 1, car_y + row, stripe_color)
         self._draw_tires(canvas, graphics, self.car_x, car_y, CAR_WIDTH, CAR_HEIGHT)
 
         score_color = graphics.Color(*SCORE_RGB)

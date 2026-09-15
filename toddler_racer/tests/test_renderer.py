@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from mlb_led_scoreboard_toddler_racer.config import Config
-from mlb_led_scoreboard_toddler_racer.renderer import CAR_WIDTH, OBSTACLE_WIDTH, Renderer
+from mlb_led_scoreboard_toddler_racer.renderer import CAR_HEIGHT, CAR_STRIPE_COLORS_RGB, CAR_WIDTH, OBSTACLE_WIDTH, Renderer
 
 
 class FakeMLBConfig:
@@ -26,6 +26,8 @@ def make_renderer(tmp_path: Path) -> Renderer:
     renderer._game_mode.path = tmp_path / "game_mode.json"
     renderer._game_mode._screen = None
     renderer._game_mode._steer = None
+    renderer._game_mode._steer_held_left = False
+    renderer._game_mode._steer_held_right = False
     return renderer
 
 
@@ -43,21 +45,35 @@ class TestRendererGameplay(unittest.TestCase):
         self.assertLessEqual(self.renderer.car_x + CAR_WIDTH, self.renderer.road_right)
 
     def test_steer_left_moves_car_left_and_clamps_at_road_edge(self):
+        # The car moves continuously while the button is held (see
+        # data/game_mode.py's held_direction()), so one set_steer_held call covers
+        # every frame below -- no repeated taps needed.
         start_x = self.renderer.car_x
-        self.renderer._game_mode.request_steer("left")
+        self.renderer._game_mode.set_steer_held("left", True)
         self.renderer._consume_steer()
         self.assertLess(self.renderer.car_x, start_x)
 
-        for _ in range(50):  # far more than enough presses to hit the edge
-            self.renderer._game_mode.request_steer("left")
+        for _ in range(50):  # far more than enough frames to hit the edge
             self.renderer._consume_steer()
         self.assertEqual(self.renderer.car_x, self.renderer.road_left)
 
     def test_steer_right_clamps_at_road_edge(self):
+        self.renderer._game_mode.set_steer_held("right", True)
         for _ in range(50):
-            self.renderer._game_mode.request_steer("right")
             self.renderer._consume_steer()
         self.assertEqual(self.renderer.car_x, self.renderer.road_right - CAR_WIDTH)
+
+    def test_car_moves_continuously_while_held_without_repeated_taps(self):
+        self.renderer._game_mode.set_steer_held("right", True)
+        start_x = self.renderer.car_x
+
+        self.renderer._consume_steer()
+        after_one_frame = self.renderer.car_x
+        self.renderer._consume_steer()
+        after_two_frames = self.renderer.car_x
+
+        self.assertGreater(after_one_frame, start_x)
+        self.assertGreater(after_two_frames, after_one_frame)
 
     def test_obstacle_spawns_after_configured_interval(self):
         self.assertEqual(len(self.renderer.obstacles), 0)
@@ -67,7 +83,7 @@ class TestRendererGameplay(unittest.TestCase):
 
     def test_catching_an_obstacle_scores_a_point_and_flashes_without_ending_the_game(self):
         # Place an obstacle directly on the car and at car height, then advance once.
-        car_y = self.renderer.height - 2 - 3  # CAR_Y_MARGIN=2, CAR_HEIGHT=3
+        car_y = self.renderer.height - 2 - 5  # CAR_Y_MARGIN=2, CAR_HEIGHT=5
         self.renderer.obstacles = [{"x": self.renderer.car_x, "y": float(car_y), "caught": False}]
 
         self.renderer._advance()
@@ -97,6 +113,14 @@ class TestRendererGameplay(unittest.TestCase):
 
         self.assertEqual(self.renderer.score, 0)
         self.assertEqual(self.renderer.obstacles, [])
+
+    def test_car_height_matches_the_number_of_rainbow_stripes(self):
+        # One row per hue (red/yellow/green/blue/violet) top to bottom, per Eric's
+        # toddler's request -- CAR_HEIGHT is derived from the stripe list so they
+        # can never silently drift apart.
+        self.assertEqual(CAR_HEIGHT, len(CAR_STRIPE_COLORS_RGB))
+        self.assertEqual(CAR_STRIPE_COLORS_RGB[0], (255, 0, 0))  # red on top
+        self.assertEqual(CAR_STRIPE_COLORS_RGB[-1], (148, 0, 211))  # violet on the bottom
 
     def test_road_is_narrower_than_the_panel_and_centered(self):
         self.assertGreater(self.renderer.road_left, 0)
