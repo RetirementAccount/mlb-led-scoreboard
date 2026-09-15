@@ -9,7 +9,7 @@ from mlb_led_scoreboard_fruit_catcher.renderer import (
     FUSE_SPARK_CYCLE_RGB,
     FUSE_SPARK_FRAMES_PER_COLOR,
     OBJECT_WIDTH,
-    PLAYFIELD_TOP,
+    SPAWN_Y,
     Renderer,
 )
 
@@ -41,7 +41,7 @@ def make_renderer(tmp_path: Path) -> Renderer:
 
 
 def make_object(**overrides) -> dict:
-    obj = {"x": 0.0, "y": float(PLAYFIELD_TOP), "type": "fruit", "fruit_index": 0, "pattern": "straight", "dir": 1, "zigzag_timer": 0, "caught": False}
+    obj = {"x": 0.0, "y": float(SPAWN_Y), "type": "fruit", "fruit_index": 0, "pattern": "straight", "dir": 1, "zigzag_timer": 0, "caught": False}
     obj.update(overrides)
     return obj
 
@@ -90,7 +90,7 @@ class TestFruitCatcherGameplay(unittest.TestCase):
         obj = make_object(x=10.0, pattern="straight")
         self.renderer._move_object(obj)
         self.assertEqual(obj["x"], 10.0)
-        self.assertGreater(obj["y"], PLAYFIELD_TOP)
+        self.assertGreater(obj["y"], SPAWN_Y)
 
     def test_diagonal_object_moves_horizontally_in_its_assigned_direction(self):
         obj = make_object(x=10.0, pattern="diagonal", dir=1)
@@ -143,7 +143,7 @@ class TestFruitCatcherGameplay(unittest.TestCase):
         self.renderer._advance()
 
         # the object should not have moved, and no new object should have spawned
-        self.assertEqual(obj["y"], float(PLAYFIELD_TOP))
+        self.assertEqual(obj["y"], float(SPAWN_Y))
         self.assertEqual(self.renderer.hit_animation_frames_remaining, 4)
 
     def test_steer_is_ignored_during_the_hit_animation(self):
@@ -191,7 +191,7 @@ class TestFruitCatcherGameplay(unittest.TestCase):
 
         self.renderer._advance()
 
-        self.assertEqual(obj["y"], float(PLAYFIELD_TOP))
+        self.assertEqual(obj["y"], float(SPAWN_Y))
 
     def test_caught_fruit_despawns_immediately_instead_of_falling_past_the_catcher(self):
         catcher_y = self.renderer.height - 2 - 4  # CATCHER_Y_MARGIN, BASKET_HEIGHT
@@ -236,7 +236,7 @@ class TestFruitCatcherGameplay(unittest.TestCase):
         obj = self.renderer._spawn_object()
         self.assertGreaterEqual(obj["x"], 0)
         self.assertLessEqual(obj["x"], self.renderer.width - OBJECT_WIDTH)
-        self.assertEqual(obj["y"], float(PLAYFIELD_TOP))
+        self.assertEqual(obj["y"], float(SPAWN_Y))
 
     def test_reset_clears_score_lives_objects_and_game_over(self):
         self.renderer.score = 500

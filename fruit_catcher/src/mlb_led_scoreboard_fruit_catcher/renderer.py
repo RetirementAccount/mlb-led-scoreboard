@@ -16,7 +16,6 @@ from .data import Data
 # costs a life. Unlike toddler_racer, this one *can* end (a deliberate contrast in
 # the game suite) -- 3 lives, Game Over overlay, restart via confirm.
 
-PLAYFIELD_TOP = 7  # reserve the top rows for the score/lives HUD, objects fall below this
 CATCHER_Y_MARGIN = 2
 
 # Widened (was 7,7,5,3) so a stationary basket comfortably spans more than one
@@ -32,6 +31,13 @@ SPIN_CYCLE_FRAMES = 8  # see _spin_scale()
 # caught (or missed) well before/after their sprite visually touched the basket.
 OBJECT_WIDTH = 8
 OBJECT_HEIGHT = 8
+
+# Objects spawn fully off the top edge of the screen and scroll down into view,
+# rather than starting already a few rows in -- gives the player the whole fall to
+# react instead of just the tail end of it. The score/lives HUD is drawn after
+# objects each frame (see _draw()), so it stays legible even while something is
+# passing behind it on the way in.
+SPAWN_Y = -OBJECT_HEIGHT
 
 PIP_SIZE = 2
 PIP_SPACING = 3
@@ -209,12 +215,12 @@ class Renderer(api.PluginRenderer[Data]):
     def _spawn_object(self) -> dict:
         x = float(random.randint(0, self.width - OBJECT_WIDTH))
         if random.random() < self.config.bomb_chance:
-            return {"x": x, "y": float(PLAYFIELD_TOP), "type": "bomb", "pattern": "straight", "dir": 1, "zigzag_timer": 0, "caught": False}
+            return {"x": x, "y": float(SPAWN_Y), "type": "bomb", "pattern": "straight", "dir": 1, "zigzag_timer": 0, "caught": False}
 
         pattern = random.choices(list(PATTERN_WEIGHTS.keys()), weights=list(PATTERN_WEIGHTS.values()))[0]
         return {
             "x": x,
-            "y": float(PLAYFIELD_TOP),
+            "y": float(SPAWN_Y),
             "type": "fruit",
             "fruit_index": random.randrange(len(FRUITS)),
             "pattern": pattern,
