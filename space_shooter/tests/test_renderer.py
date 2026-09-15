@@ -48,6 +48,12 @@ def make_renderer(tmp_path: Path) -> Renderer:
     return renderer
 
 
+def make_enemy(**overrides) -> dict:
+    enemy = {"x": 0.0, "y": 0.0, "sprite": None, "hits_taken": 0}
+    enemy.update(overrides)
+    return enemy
+
+
 class TestSpaceShooterGameplay(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -100,14 +106,41 @@ class TestSpaceShooterGameplay(unittest.TestCase):
             self.renderer._advance()
         self.assertGreater(len(self.renderer.bullets), 0)
 
-    def test_bullet_destroys_an_enemy_and_scores_points(self):
-        self.renderer.enemies = [{"x": 10.0, "y": 10.0}]
+    def test_bullet_destroys_a_one_hit_enemy_and_scores_points(self):
+        self.renderer.config.enemy_max_hits = 1
+        self.renderer.enemies = [make_enemy(x=10.0, y=10.0)]
         self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash", "dy": 0.0}]
 
         self.renderer._resolve_collisions()
 
         self.assertEqual(self.renderer.enemies, [])
         self.assertEqual(self.renderer.bullets, [])
+        self.assertEqual(self.renderer.score, ENEMY_KILL_POINTS)
+
+    def test_enemy_survives_a_non_fatal_hit_and_is_marked_damaged(self):
+        # Eric's fix for the upgraded gun trivializing the game: enemies now take
+        # multiple hits (default 2), chipping a corner chunk off instead of
+        # instantly dying. The bullet is still consumed either way.
+        self.renderer.config.enemy_max_hits = 2
+        enemy = make_enemy(x=10.0, y=10.0)
+        self.renderer.enemies = [enemy]
+        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash", "dy": 0.0}]
+
+        self.renderer._resolve_collisions()
+
+        self.assertEqual(self.renderer.enemies, [enemy])  # still alive
+        self.assertEqual(enemy["hits_taken"], 1)
+        self.assertEqual(self.renderer.bullets, [])  # bullet still consumed
+        self.assertEqual(self.renderer.score, 0)  # no points until actually destroyed
+
+    def test_enemy_is_destroyed_on_the_hit_that_reaches_max_hits(self):
+        self.renderer.config.enemy_max_hits = 2
+        self.renderer.enemies = [make_enemy(x=10.0, y=10.0, hits_taken=1)]
+        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash", "dy": 0.0}]
+
+        self.renderer._resolve_collisions()
+
+        self.assertEqual(self.renderer.enemies, [])
         self.assertEqual(self.renderer.score, ENEMY_KILL_POINTS)
 
     def test_enemy_colliding_with_the_player_costs_a_life_and_starts_flicker(self):

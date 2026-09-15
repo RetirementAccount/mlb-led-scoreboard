@@ -9,6 +9,12 @@ DEFAULT_FIRE_INTERVAL_FRAMES = 5  # ~2 volleys/sec at 10fps -- auto-fire, no but
 DEFAULT_FRAME_SECONDS = 0.1  # ~10fps, matches the other games in the suite
 DEFAULT_STARTING_LIVES = 3
 DEFAULT_HIT_FLICKER_FRAMES = 10  # brief invulnerability + visual flicker after taking a hit
+# Hits an enemy survives before being destroyed -- each non-fatal hit chips a 2x2
+# corner off its sprite (Centipede-style) instead of instantly destroying it. With
+# a wide/rapid-fire upgraded gun, one-shot kills made the game trivial once the
+# player had the gun for a while; more HP re-introduces friction without nerfing
+# the gun itself.
+DEFAULT_ENEMY_MAX_HITS = 2
 
 
 class Config(api.PluginConfig):
@@ -23,3 +29,4 @@ class Config(api.PluginConfig):
         self.frame_seconds = plugin_config.get("frame_seconds", DEFAULT_FRAME_SECONDS)
         self.starting_lives = plugin_config.get("starting_lives", DEFAULT_STARTING_LIVES)
         self.hit_flicker_frames = plugin_config.get("hit_flicker_frames", DEFAULT_HIT_FLICKER_FRAMES)
+        self.enemy_max_hits = plugin_config.get("enemy_max_hits", DEFAULT_ENEMY_MAX_HITS)

@@ -32,6 +32,9 @@ BULLET_DASH_WIDTH = 2  # a horizontal 2px dash, same silhouette as the racer's r
 BULLET_DOT_SIZE = 2  # a 2x2 dot
 
 ENEMY_KILL_POINTS = 10
+# Each non-fatal hit blanks this corner chunk of the enemy's sprite (top-left,
+# toward its nose since it faces left) -- see _resolve_collisions/_draw_enemy.
+DAMAGE_CHUNK_SIZE = 2
 
 MAX_GUN_LEVEL = 4
 # Vertical offsets (from the player's center) and shape for each shot lane, by gun
@@ -58,7 +61,7 @@ LIGHT_CHASE_FRAMES_PER_STEP = 2
 # A scrolling starfield background, same right-to-left scroll direction as the
 # racer's road dashes -- a handful of fixed 1px stars drifting left and wrapping
 # back to the right edge, rather than a fixed lane, since space has no road.
-STAR_COUNT = 10
+STAR_COUNT = 7
 STAR_SPEED = 0.5  # slower than enemies/bullets, for a background-depth feel
 
 SPACE_RGB = (5, 5, 20)
@@ -145,8 +148,16 @@ class Renderer(api.PluginRenderer[Data]):
             except OSError as e:
                 LOGGER.warning("[space_shooter] Failed to load enemy sprite %s: %s", path, e)
                 continue
-            light_row, light_columns, light_color = cls._find_lights(image)
-            sprites.append({"image": image, "light_row": light_row, "light_columns": light_columns, "light_color": light_color})
+            light_row, light_columns, light_color, body_color = cls._find_lights(image)
+            sprites.append(
+                {
+                    "image": image,
+                    "light_row": light_row,
+                    "light_columns": light_columns,
+                    "light_color": light_color,
+                    "body_color": body_color,
+                }
+            )
         return sprites
 
     @staticmethod
@@ -169,7 +180,24 @@ class Renderer(api.PluginRenderer[Data]):
                     color = (r, g, b)
             if len(columns) >= 2:
                 best_row, best_columns, best_color = y, columns, color
-        return best_row, best_columns, best_color
+
+        if best_row is None:
+            return None, [], None, None
+
+        # The rest of the light row is otherwise a solid hull color (per Eric's
+        # UFO1.png) -- sample it so the non-lit columns can be redrawn as hull each
+        # frame instead of left blank, so the lights read as mounted on the craft
+        # rather than floating below it.
+        body_color = None
+        for x in range(image.width):
+            if x in best_columns:
+                continue
+            r, g, b, a = image.getpixel((x, best_row))
+            if a >= SPRITE_ALPHA_THRESHOLD:
+                body_color = (r, g, b)
+                break
+
+        return best_row, best_columns, best_color, body_color
 
     @staticmethod
     def _find_engine_pixel(image: "Image.Image") -> Optional[tuple]:
@@ -292,9 +320,11 @@ class Renderer(api.PluginRenderer[Data]):
             size = self._bullet_size(bullet)
             hit_enemy = next((e for e in self.enemies if self._overlaps(bullet["x"], bullet["y"], size, size, e["x"], e["y"], ENEMY_WIDTH, ENEMY_HEIGHT)), None)
             if hit_enemy is not None:
-                self.enemies.remove(hit_enemy)
-                self.score += ENEMY_KILL_POINTS
-                continue  # bullet is also consumed on the hit
+                hit_enemy["hits_taken"] += 1  # bullet is consumed on any hit, fatal or not
+                if hit_enemy["hits_taken"] >= self.config.enemy_max_hits:
+                    self.enemies.remove(hit_enemy)
+                    self.score += ENEMY_KILL_POINTS
+                continue
             surviving_bullets.append(bullet)
         self.bullets = surviving_bullets
 
@@ -327,7 +357,7 @@ class Renderer(api.PluginRenderer[Data]):
         else:
             y = random.randint(0, self.height - ENEMY_HEIGHT)
             sprite = random.choice(self._enemy_sprites) if self._enemy_sprites else None
-            self.enemies.append({"x": float(self.width), "y": float(y), "sprite": sprite})
+            self.enemies.append({"x": float(self.width), "y": float(y), "sprite": sprite, "hits_taken": 0})
 
     def _fire(self) -> None:
         center_y = self.player_y + PLAYER_HEIGHT / 2
@@ -348,7 +378,7 @@ class Renderer(api.PluginRenderer[Data]):
             graphics.DrawLine(canvas, x, y, x, y, star_color)
 
         for enemy in self.enemies:
-            self._draw_enemy(canvas, graphics, enemy.get("sprite"), int(enemy["x"]), int(enemy["y"]))
+            self._draw_enemy(canvas, graphics, enemy.get("sprite"), int(enemy["x"]), int(enemy["y"]), enemy.get("hits_taken", 0))
 
         for pickup in self.pickups:
             x, y = int(pickup["x"]), int(pickup["y"])
@@ -395,9 +425,10 @@ class Renderer(api.PluginRenderer[Data]):
             ex, ey = self._ship_engine_pixel
             canvas.SetPixel(x + ex, y + ey, *engine_color)
 
-    def _draw_enemy(self, canvas, graphics, sprite_info: Optional[dict], x: int, y: int) -> None:
+    def _draw_enemy(self, canvas, graphics, sprite_info: Optional[dict], x: int, y: int, hits_taken: int = 0) -> None:
+        damaged = hits_taken > 0
         if sprite_info is None:
-            self._draw_fallback_rect(canvas, graphics, x, y, ENEMY_WIDTH, ENEMY_HEIGHT, ENEMY_RGB, ENEMY_ACCENT_RGB, accent_on_left=True)
+            self._draw_fallback_rect(canvas, graphics, x, y, ENEMY_WIDTH, ENEMY_HEIGHT, ENEMY_RGB, ENEMY_ACCENT_RGB, accent_on_left=True, damaged=damaged)
             return
 
         image = sprite_info["image"]
@@ -406,6 +437,8 @@ class Renderer(api.PluginRenderer[Data]):
             for py in range(image.height):
                 if light_row is not None and py == light_row:
                     continue  # drawn separately below, animated
+                if damaged and px < DAMAGE_CHUNK_SIZE and py < DAMAGE_CHUNK_SIZE:
+                    continue  # a chunk bitten out of the nose corner by an earlier hit
                 r, g, b, a = image.getpixel((px, py))
                 if a >= SPRITE_ALPHA_THRESHOLD:
                     canvas.SetPixel(x + px, y + py, r, g, b)
@@ -414,13 +447,22 @@ class Renderer(api.PluginRenderer[Data]):
         if light_row is not None and light_columns:
             spacing = light_columns[1] - light_columns[0] if len(light_columns) >= 2 else image.width
             phase = (self.frame_count // LIGHT_CHASE_FRAMES_PER_STEP) % max(spacing, 1)
-            for base_col in light_columns:
-                col = (base_col + phase) % image.width
-                canvas.SetPixel(x + col, y + light_row, *sprite_info["light_color"])
+            lit_columns = {(base_col + phase) % image.width for base_col in light_columns}
+            body_color = sprite_info["body_color"]
+            for col in range(image.width):
+                if col in lit_columns:
+                    canvas.SetPixel(x + col, y + light_row, *sprite_info["light_color"])
+                elif body_color is not None:
+                    canvas.SetPixel(x + col, y + light_row, *body_color)
 
-    def _draw_fallback_rect(self, canvas, graphics, x: int, y: int, width: int, height: int, body_rgb, accent_rgb, accent_on_left: bool) -> None:
+    def _draw_fallback_rect(self, canvas, graphics, x: int, y: int, width: int, height: int, body_rgb, accent_rgb, accent_on_left: bool, damaged: bool = False) -> None:
         body_color = graphics.Color(*body_rgb)
         self._fill_rect(canvas, graphics, x, y, width, height, body_color)
+        if damaged:
+            # Re-punch the same nose-corner chunk _draw_enemy blanks on a sprite,
+            # so the fallback shape shows damage too.
+            bg_color = graphics.Color(*SPACE_RGB)
+            self._fill_rect(canvas, graphics, x, y, min(DAMAGE_CHUNK_SIZE, width), min(DAMAGE_CHUNK_SIZE, height), bg_color)
         accent_color = graphics.Color(*accent_rgb)
         accent_x = x if accent_on_left else x + width - 1
         graphics.DrawLine(canvas, accent_x, y + height // 2, accent_x, y + height // 2, accent_color)
