@@ -18,6 +18,11 @@ class FakeMLBConfig:
     plugin_config = {}
 
 
+class FakeGraphicsColor:
+    def Color(self, r, g, b):
+        return (r, g, b)
+
+
 class FakeLayout:
     width = 64
     height = 32
@@ -203,12 +208,34 @@ class TestRendererGameplay(unittest.TestCase):
         self.assertEqual(CAR_STRIPE_COLORS_RGB[0], (255, 0, 0))  # red on top
         self.assertEqual(CAR_STRIPE_COLORS_RGB[-1], (148, 0, 211))  # violet on the bottom
 
-    def test_no_heart_sprite_by_default(self):
-        # No heart.png is checked into the repo (Eric supplies his own) -- confirm
-        # the fallback mask path is what's active by default.
-        self.assertIsNone(self.renderer._heart_sprite)
+    def test_heart_sprite_is_loaded_when_present(self):
+        # Eric has supplied real pixel art (assets/heart.png) -- confirm it loads
+        # rather than silently falling back to the built-in mask.
+        self.assertIsNotNone(self.renderer._heart_sprite)
+        self.assertEqual((self.renderer._heart_sprite.width, self.renderer._heart_sprite.height), (5, 5))
+
+    def test_fallback_heart_mask_is_5x5(self):
+        # Exercised whenever no heart.png is present -- shape-checked here so it
+        # can't silently drift from the documented 5x5 size.
         self.assertEqual(len(HEART_MASK), 5)
         self.assertTrue(all(len(row) == 5 for row in HEART_MASK))
+
+    def test_hearts_shown_are_reserves_not_the_active_life(self):
+        # Per Eric's spec: hearts represent lives in reserve, not the one currently
+        # in play -- starting_lives=3 means 2 hearts to start, one fewer each time
+        # a life is lost, and 0 hearts (not 1) on the final life.
+        drawn_at = []
+        self.renderer._draw_sprite = lambda canvas, sprite, x, y: drawn_at.append(x)
+        self.renderer._draw_heart_mask = lambda canvas, graphics, x, y, color: drawn_at.append(x)
+
+        self.renderer.lives = 3
+        self.renderer._draw_lives(canvas=None, graphics=FakeGraphicsColor())
+        self.assertEqual(len(drawn_at), 2)
+
+        drawn_at.clear()
+        self.renderer.lives = 1
+        self.renderer._draw_lives(canvas=None, graphics=FakeGraphicsColor())
+        self.assertEqual(len(drawn_at), 0)
 
     def test_road_is_narrower_than_the_panel_and_centered(self):
         self.assertGreater(self.renderer.road_left, 0)

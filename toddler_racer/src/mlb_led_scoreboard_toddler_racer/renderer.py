@@ -244,11 +244,15 @@ class Renderer(api.PluginRenderer[Data]):
             self._draw_game_over(canvas, graphics)
 
     def _draw_lives(self, canvas, graphics) -> None:
+        # Hearts represent lives in reserve, not the one currently in play -- with
+        # starting_lives=3 that's 2 hearts to start, one disappearing each time the
+        # active life is lost and the next one takes over. The last life (0 hearts
+        # showing) has no reserve backing it up.
         size = HEART_ICON_SIZE
         spacing = size + HEART_ICON_GAP
         y = self.height - HEART_ICON_MARGIN - size
         heart_color = graphics.Color(*HEART_RGB)
-        for i in range(self.lives):
+        for i in range(max(0, self.lives - 1)):
             x = HEART_ICON_MARGIN + i * spacing
             if self._heart_sprite is not None:
                 self._draw_sprite(canvas, self._heart_sprite, x, y)
