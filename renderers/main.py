@@ -45,8 +45,14 @@ class MainRenderer:
                 # Exclusive: bypasses the normal rotation entirely while in the game
                 # area (whether showing the menu or an actual game), rather than being
                 # one more timed screen in it -- continuous player-driven rendering
-                # doesn't fit the "show for N seconds" rotation model.
-                self.__draw_plugin_screen(screen, self.data.game_mode.is_in_game_area)
+                # doesn't fit the "show for N seconds" rotation model. The condition
+                # checks that THIS SPECIFIC screen is still current, not just that
+                # we're still somewhere in the game area -- is_in_game_area() alone
+                # would never notice e.g. the menu launching a game, since both "menu"
+                # and "racer" count as "in the game area" (confirmed on real hardware:
+                # confirming a game from the menu did nothing, since the menu's own
+                # display loop never saw a reason to end).
+                self.__draw_plugin_screen(screen, lambda s=screen: self.data.game_mode.current_screen() == s)
                 continue
 
             drew_anything = False
