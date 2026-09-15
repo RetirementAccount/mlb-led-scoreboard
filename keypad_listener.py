@@ -11,7 +11,7 @@ Key mapping (keyboard side):
   Up arrow    toggle pause (freezes whatever's currently showing, ignoring its timer)
   Right arrow skip: end the current screen now, advance to the next -- works even while paused
   G           open the game menu (or, if already in the game area, exit back to the ticker)
-  F           confirm a menu selection (see data/game_mode.py, game_menu plugin)
+  Enter       confirm a menu selection (see data/game_mode.py, game_menu plugin)
 
 Mouse-button side (the keypad's touchpad click buttons, labeled L/R on this unit):
   Left click  in the menu: move the selection left one slot per click
@@ -61,7 +61,7 @@ REQUIRED_KEYBOARD_KEYS = {
     ecodes.KEY_UP,
     ecodes.KEY_RIGHT,
     ecodes.KEY_G,
-    ecodes.KEY_F,
+    ecodes.KEY_ENTER,
 }
 REQUIRED_MOUSE_BUTTONS = {ecodes.BTN_LEFT, ecodes.BTN_RIGHT}
 
@@ -80,7 +80,7 @@ RESET_KEY = ecodes.KEY_0
 PAUSE_KEY = ecodes.KEY_UP
 SKIP_KEY = ecodes.KEY_RIGHT
 GAME_AREA_KEY = ecodes.KEY_G
-CONFIRM_KEY = ecodes.KEY_F
+CONFIRM_KEY = ecodes.KEY_ENTER
 
 
 def find_keyboard_device() -> "InputDevice | None":

@@ -207,7 +207,7 @@ Once the racer worked well, Eric wanted a whole suite of simple games rather tha
 
 **Keypad remapped for the new state machine**:
 - `G`: open the menu if currently in normal rotation; exit straight back to normal rotation if already anywhere in the game area (menu or a game). Simple, consistent toggle regardless of how deep you are.
-- New key, **`F`** (chosen for being right next to `G` on the keyboard, and already confirmed working in this project's earlier key-sweep) — sends a one-shot `confirm`. Only the menu currently does anything with it; a future game could use it too (e.g. "restart") if it wanted.
+- Confirm key: originally `F` (chosen for being right next to `G`), later switched to **Enter** per Eric's preference for a more traditional confirm key — sends a one-shot `confirm`. Only the menu currently does anything with it; games use it too now (e.g. `fruit_catcher`'s restart-after-Game-Over).
 - L/R clicks are now generically "steer" input consumed by whatever's currently showing — the menu uses it for cursor movement, `toddler_racer` still uses it for the car, and any future game is free to interpret it however makes sense.
 - Also exposed over SSH: `./toggle_rotation.py --menu` / `--exit-game` / `--launch <plugin>` / `--confirm` / `--steer left|right`.
 
