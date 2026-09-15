@@ -14,8 +14,10 @@ if TYPE_CHECKING:
 # that fall from the top. Catching one is a small celebration (score + screen flash);
 # missing one has zero penalty -- there is no lose condition by design.
 ROAD_MARGIN_FRACTION = 0.2  # road spans the middle (1 - 2*margin) of the panel width
-CAR_WIDTH = 5
-CAR_HEIGHT = 3
+CAR_WIDTH = 3  # the car's body -- vertically oriented (taller than wide), tires drawn outside this
+CAR_HEIGHT = 6
+TIRE_WIDTH = 1
+TIRE_HEIGHT = 2
 CAR_Y_MARGIN = 2  # pixels between the car and the bottom edge
 OBSTACLE_WIDTH = 5
 OBSTACLE_HEIGHT = 3
@@ -27,6 +29,7 @@ GRASS_RGB = (20, 90, 20)
 ROAD_RGB = (50, 50, 50)
 DASH_RGB = (230, 230, 230)
 CAR_RGB = (230, 30, 30)
+TIRE_RGB = (40, 40, 40)
 OBSTACLE_RGB = (240, 200, 20)
 FLASH_RGB = (255, 255, 255)
 SCORE_RGB = (255, 255, 255)
@@ -125,7 +128,7 @@ class Renderer(api.PluginRenderer[Data]):
         dash_color = graphics.Color(*DASH_RGB)
         center_x = (self.road_left + self.road_right) // 2
         for y in range(self.height):
-            if (y + self.frame_count) % DASH_PERIOD < DASH_LENGTH:
+            if (y - self.frame_count) % DASH_PERIOD < DASH_LENGTH:
                 graphics.DrawLine(canvas, center_x, y, center_x, y, dash_color)
 
         obstacle_color = graphics.Color(*OBSTACLE_RGB)
@@ -135,9 +138,21 @@ class Renderer(api.PluginRenderer[Data]):
         car_color = graphics.Color(*CAR_RGB)
         car_y = self.height - CAR_Y_MARGIN - CAR_HEIGHT
         self._fill_rect(canvas, graphics, self.car_x, car_y, CAR_WIDTH, CAR_HEIGHT, car_color)
+        self._draw_tires(canvas, graphics, self.car_x, car_y)
 
         score_color = graphics.Color(*SCORE_RGB)
         graphics.DrawText(canvas, self.status_font["font"], 1, self.status_font["size"]["height"], score_color, str(self.score))
+
+    def _draw_tires(self, canvas, graphics, car_x: int, car_y: int) -> None:
+        # Four tire nubs poking out to each side of the (narrower) car body: one pair
+        # near the front (top), one pair near the rear (bottom).
+        tire_color = graphics.Color(*TIRE_RGB)
+        left_x = car_x - TIRE_WIDTH
+        right_x = car_x + CAR_WIDTH
+        rear_y = car_y + CAR_HEIGHT - TIRE_HEIGHT
+        for x in (left_x, right_x):
+            self._fill_rect(canvas, graphics, x, car_y, TIRE_WIDTH, TIRE_HEIGHT, tire_color)
+            self._fill_rect(canvas, graphics, x, rear_y, TIRE_WIDTH, TIRE_HEIGHT, tire_color)
 
     def _fill_rect(self, canvas, graphics, x: int, y: int, w: int, h: int, color) -> None:
         for row in range(h):
