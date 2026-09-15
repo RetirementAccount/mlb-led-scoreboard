@@ -51,7 +51,6 @@ GRASS_RGB = (20, 90, 20)
 ROAD_RGB = (50, 50, 50)
 DASH_RGB = (230, 230, 230)
 TIRE_RGB = (0, 0, 0)  # was (40,40,40), nearly identical to ROAD_RGB (50,50,50) -- invisible against it
-OBSTACLE_RGB = (240, 200, 20)
 SCORE_RGB = (255, 255, 255)
 GAME_OVER_RGB = (255, 60, 60)
 
@@ -94,6 +93,8 @@ SPRITE_ALPHA_THRESHOLD = 128
 # version of each, top to bottom. This also sets CAR_HEIGHT (one row per stripe),
 # which now happens to match OBSTACLE_HEIGHT (both 6) now that orange is included --
 # not load-bearing, just a coincidence of there being six rainbow colors.
+# Also reused for opponent cars: each one is a single solid color, randomly chosen
+# from this same list at spawn time (see _spawn_obstacle), rather than striped.
 CAR_STRIPE_COLORS_RGB = [
     (255, 0, 0),  # red
     (255, 140, 0),  # orange
@@ -230,7 +231,8 @@ class Renderer(api.PluginRenderer[Data]):
             return {"x": x, "y": 0.0, "type": "oil", "width": OIL_WIDTH, "height": OIL_HEIGHT}
 
         x = random.randint(self.road_left, self.road_right - OBSTACLE_WIDTH)
-        return {"x": x, "y": 0.0, "type": "car", "width": OBSTACLE_WIDTH, "height": OBSTACLE_HEIGHT}
+        color = random.choice(CAR_STRIPE_COLORS_RGB)
+        return {"x": x, "y": 0.0, "type": "car", "width": OBSTACLE_WIDTH, "height": OBSTACLE_HEIGHT, "color": color}
 
     def _overlaps(self, obstacle: dict, car_y: int) -> bool:
         obstacle_bottom = obstacle["y"] + obstacle["height"]
@@ -265,7 +267,6 @@ class Renderer(api.PluginRenderer[Data]):
             if (y - dash_scroll) % DASH_PERIOD < DASH_LENGTH:
                 graphics.DrawLine(canvas, center_x, y, center_x, y, dash_color)
 
-        obstacle_color = graphics.Color(*OBSTACLE_RGB)
         oil_color = graphics.Color(*OIL_RGB)
         for obstacle in self.obstacles:
             obstacle_x = int(obstacle["x"])
@@ -276,6 +277,7 @@ class Renderer(api.PluginRenderer[Data]):
                 else:
                     self._draw_mask(canvas, graphics, OIL_MASK, obstacle_x, obstacle_y, oil_color)
             else:
+                obstacle_color = graphics.Color(*obstacle["color"])
                 self._fill_rect(canvas, graphics, obstacle_x, obstacle_y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT, obstacle_color)
                 self._draw_tires(canvas, graphics, obstacle_x, obstacle_y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT)
 

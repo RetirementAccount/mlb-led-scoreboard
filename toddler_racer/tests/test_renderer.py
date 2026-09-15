@@ -56,7 +56,7 @@ def car_y(renderer: Renderer) -> int:
 
 
 def make_car_obstacle(**overrides) -> dict:
-    obstacle = {"x": 0.0, "y": 0.0, "type": "car", "width": OBSTACLE_WIDTH, "height": OBSTACLE_HEIGHT}
+    obstacle = {"x": 0.0, "y": 0.0, "type": "car", "width": OBSTACLE_WIDTH, "height": OBSTACLE_HEIGHT, "color": (255, 0, 0)}
     obstacle.update(overrides)
     return obstacle
 
@@ -119,6 +119,13 @@ class TestRendererGameplay(unittest.TestCase):
         self.renderer._game_mode.set_steer_held("left", True)
         self.renderer._consume_input()
         self.assertEqual(self.renderer.car_x, start_x)
+
+    def test_spawned_car_obstacle_uses_one_of_the_six_rainbow_colors(self):
+        # Eric's request: opponent cars come in solid colors, one of the 6 used for
+        # the player's rainbow stripes -- picked at random per car, not striped.
+        self.renderer.config.oil_chance = 0.0  # force a car spawn, not oil
+        obstacle = self.renderer._spawn_obstacle()
+        self.assertIn(obstacle["color"], CAR_STRIPE_COLORS_RGB)
 
     def test_obstacle_spawns_after_configured_interval(self):
         self.assertEqual(len(self.renderer.obstacles), 0)
