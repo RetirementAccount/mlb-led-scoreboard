@@ -288,12 +288,12 @@ class TestSpaceShooterGameplay(unittest.TestCase):
 
     def test_gun_lane_patterns_match_the_current_progression(self):
         # Per Eric's exact spec: 1 single dash, 2 a lone dot, 3 two dashes offset a
-        # few px above/below center, 4 a flashing dot flanked by two dashes further
-        # out (the diagonal bouncing bullets from an earlier iteration are gone).
+        # few px above/below center, 4 just the flashing dot alone -- no side
+        # bullets, it deals extra damage instead (see BULLET_DAMAGE).
         self.assertEqual(GUN_LANES[1], [(0, "dash")])
         self.assertEqual(GUN_LANES[2], [(0, "dot")])
         self.assertEqual(GUN_LANES[3], [(-2, "dash"), (2, "dash")])
-        self.assertEqual(GUN_LANES[4], [(-4, "dash"), (0, "flash_dot"), (4, "dash")])
+        self.assertEqual(GUN_LANES[4], [(0, "flash_dot")])
 
     def test_gun4_center_dot_flashes_red_orange_yellow(self):
         self.renderer.gun_level = MAX_GUN_LEVEL
@@ -306,6 +306,28 @@ class TestSpaceShooterGameplay(unittest.TestCase):
             self.renderer.frame_count = frame
             seen.add(self.renderer._current_gun4_flash_color())
         self.assertEqual(seen, set(GUN4_FLASH_CYCLE_RGB))
+
+    def test_flash_dot_deals_double_damage(self):
+        self.renderer.config.enemy_max_hits = 4
+        enemy = make_enemy(x=10.0, y=10.0)
+        self.renderer.enemies = [enemy]
+        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "flash_dot"}]
+
+        self.renderer._resolve_collisions()
+
+        self.assertEqual(enemy["hits_taken"], 2)
+
+    def test_dash_and_dot_deal_single_damage(self):
+        for shape in ("dash", "dot"):
+            with self.subTest(shape=shape):
+                self.renderer.config.enemy_max_hits = 4
+                enemy = make_enemy(x=10.0, y=10.0)
+                self.renderer.enemies = [enemy]
+                self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": shape}]
+
+                self.renderer._resolve_collisions()
+
+                self.assertEqual(enemy["hits_taken"], 1)
 
     def test_bullet_despawns_past_the_right_edge(self):
         self.renderer.bullets = [{"x": float(self.renderer.width), "y": 10.0, "shape": "dash"}]

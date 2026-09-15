@@ -44,14 +44,18 @@ DAMAGE_CHUNK_ORDER = ["top_left", "top_right", "bottom_left"]
 MAX_GUN_LEVEL = 4
 # Vertical offsets (from the player's center) and shape for each shot lane, by gun
 # level: 1 a single center dash, 2 a lone center dot, 3 two dashes offset a few px
-# above/below center for wider coverage, 4 a flashing dot ("flash_dot" -- see
-# GUN4_FLASH_CYCLE_RGB) flanked by two dashes further out.
+# above/below center for wider coverage, 4 just a flashing dot ("flash_dot" -- see
+# GUN4_FLASH_CYCLE_RGB), no side bullets -- it deals BULLET_DAMAGE's higher hit
+# count instead of relying on extra lanes for its power.
 GUN_LANES = {
     1: [(0, "dash")],
     2: [(0, "dot")],
     3: [(-2, "dash"), (2, "dash")],
-    4: [(-4, "dash"), (0, "flash_dot"), (4, "dash")],
+    4: [(0, "flash_dot")],
 }
+# Hits-taken added per bullet shape on a landed hit -- everything is 1 except the
+# level 4 flashing dot, which counts double.
+BULLET_DAMAGE = {"dash": 1, "dot": 1, "flash_dot": 2}
 # Level 4's center dot cycles red -> orange -> yellow, same color-cycling technique
 # as the ship's engine pixel / fruit_catcher's bomb fuse.
 GUN4_FLASH_CYCLE_RGB = [(220, 30, 30), (255, 140, 0), (255, 220, 0)]
@@ -347,7 +351,7 @@ class Renderer(api.PluginRenderer[Data]):
             size = self._bullet_size(bullet)
             hit_enemy = next((e for e in self.enemies if self._overlaps(bullet["x"], bullet["y"], size, size, e["x"], e["y"], ENEMY_WIDTH, ENEMY_HEIGHT)), None)
             if hit_enemy is not None:
-                hit_enemy["hits_taken"] += 1  # bullet is consumed on any hit, fatal or not
+                hit_enemy["hits_taken"] += BULLET_DAMAGE[bullet["shape"]]  # bullet is consumed on any hit, fatal or not
                 if hit_enemy["hits_taken"] >= self.config.enemy_max_hits:
                     self.enemies.remove(hit_enemy)
                     self.score += ENEMY_KILL_POINTS
