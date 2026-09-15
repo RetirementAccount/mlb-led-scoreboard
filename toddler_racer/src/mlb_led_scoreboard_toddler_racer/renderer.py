@@ -16,9 +16,9 @@ if TYPE_CHECKING:
 
 # A toddler racing game: a road down the middle of the panel, the car steered
 # left/right by the keypad's L/R mouse-click buttons, and obstacles that fall from
-# the top. Two kinds of hazard, both trigger the same spin animation (two full
-# squash-cycles, see _spin_scale) and lock out steering for its duration, but differ
-# in how much of the world pauses with the car:
+# the top. Two kinds of hazard, both trigger the same spin-out animation (two full
+# 4-direction rotations, see _spin_state/_draw_spinning_car) and lock out steering
+# for its duration, but differ in how much of the world pauses with the car:
 #   - a car: costs a life (3 total, see fruit_catcher for the same mechanism) and
 #     fully freezes the world -- no obstacle moves or spawns until the spin ends.
 #   - an oil patch: no life lost, and only steering locks -- the road and every
@@ -51,7 +51,15 @@ DASH_PERIOD = 6
 # slower car obstacle speed -- otherwise it would visually drift backwards relative
 # to the dashes it's supposedly stuck to.
 DASH_SPEED_MULTIPLIER = 2
-SPIN_CYCLE_FRAMES = 8  # see _spin_scale() -- same squash-cycle trick as fruit_catcher's basket
+# The spin-out animation steps the car through 4 orientations -- nose pointing
+# north, east, south, west, north -- like a real car spinning out, rather than a
+# symmetric width-squash (which reads as a cylinder rolling on its long axis, not a
+# car spinning in the plane of the road). One full 4-step rotation is
+# SPIN_CYCLE_FRAMES; hit_animation_frames (16) is exactly 2x that, so the car
+# completes two full spins per Eric's request before the race unfreezes.
+SPIN_CYCLE_FRAMES = 8
+SPIN_STATES = 4  # north, east, south, west
+SPIN_STATE_FRAMES = SPIN_CYCLE_FRAMES // SPIN_STATES
 
 GRASS_RGB = (20, 90, 20)
 ROAD_RGB = (50, 50, 50)
@@ -195,19 +203,21 @@ class Renderer(api.PluginRenderer[Data]):
     def _advance(self) -> None:
         if self.game_over:
             return
-        self.frame_count += 1
 
         if self.hit_animation_frames_remaining > 0:
             self.hit_animation_frames_remaining -= 1
             if self.hit_animation_frames_remaining == 0 and self.lives <= 0:
                 self.game_over = True
             if self.freeze_world:
-                return  # a car crash pauses everything -- obstacles, spawning, all of it
-            # an oil spin-out only locks steering (see _consume_input); the road and
-            # every obstacle keep moving normally underneath the spinning car -- so
-            # fall through into the usual obstacle-processing below rather than
-            # returning early.
+                # A car crash pauses everything -- obstacles, spawning, and (by not
+                # advancing frame_count, which the road dashes scroll off of) the
+                # road itself, so the whole scene reads as stopped rather than just
+                # the car. An oil spin-out only locks steering (see _consume_input);
+                # frame_count keeps advancing below and the road/other obstacles
+                # keep moving normally underneath the spinning car.
+                return
 
+        self.frame_count += 1
         car_y = self.height - CAR_Y_MARGIN - CAR_HEIGHT
         remaining = []
         for obstacle in self.obstacles:
@@ -248,18 +258,10 @@ class Renderer(api.PluginRenderer[Data]):
             return False
         return not (obstacle["x"] + obstacle["width"] < self.car_x or obstacle["x"] > self.car_x + CAR_WIDTH)
 
-    def _spin_scale(self) -> float:
-        # Same squash-cycle trick as fruit_catcher's basket -- true rotation isn't
-        # feasible at this pixel budget, but a horizontal squash (full width -> thin
-        # sliver -> full width, repeating) reads as a "spin" for a car that's only
-        # 3px wide to begin with. hit_animation_frames (16) is exactly 2x
-        # SPIN_CYCLE_FRAMES (8), so the car completes two full spins in place per
-        # Eric's request before the race unfreezes.
+    def _spin_state(self) -> int:
+        # 0=north (normal), 1=east, 2=south, 3=west -- see _draw_spinning_car.
         elapsed = self.config.hit_animation_frames - self.hit_animation_frames_remaining
-        pos = elapsed % SPIN_CYCLE_FRAMES
-        half = SPIN_CYCLE_FRAMES // 2
-        triangle = pos if pos <= half else SPIN_CYCLE_FRAMES - pos
-        return max(0.15, triangle / half)
+        return (elapsed // SPIN_STATE_FRAMES) % SPIN_STATES
 
     def _draw(self, canvas, graphics) -> None:
         canvas.Fill(*GRASS_RGB)
@@ -290,14 +292,15 @@ class Renderer(api.PluginRenderer[Data]):
                 self._draw_tires(canvas, graphics, obstacle_x, obstacle_y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT)
 
         car_y = self.height - CAR_Y_MARGIN - CAR_HEIGHT
-        width_scale = self._spin_scale() if self.hit_animation_frames_remaining > 0 else 1.0
-        center = self.car_x + CAR_WIDTH / 2
-        for row, rgb in enumerate(CAR_STRIPE_COLORS_RGB):
-            width = max(1, round(CAR_WIDTH * width_scale))
-            row_x = round(center - width / 2)
-            stripe_color = graphics.Color(*rgb)
-            graphics.DrawLine(canvas, row_x, car_y + row, row_x + width - 1, car_y + row, stripe_color)
-        self._draw_tires(canvas, graphics, self.car_x, car_y, CAR_WIDTH, CAR_HEIGHT)
+        if self.hit_animation_frames_remaining > 0:
+            cx = self.car_x + CAR_WIDTH / 2
+            cy = car_y + CAR_HEIGHT / 2
+            self._draw_spinning_car(canvas, graphics, cx, cy, self._spin_state())
+        else:
+            for row, rgb in enumerate(CAR_STRIPE_COLORS_RGB):
+                stripe_color = graphics.Color(*rgb)
+                graphics.DrawLine(canvas, self.car_x, car_y + row, self.car_x + CAR_WIDTH - 1, car_y + row, stripe_color)
+            self._draw_tires(canvas, graphics, self.car_x, car_y, CAR_WIDTH, CAR_HEIGHT)
 
         score_color = graphics.Color(*SCORE_RGB)
         graphics.DrawText(canvas, self.status_font["font"], 1, self.status_font["size"]["height"], score_color, str(self.score))
@@ -306,6 +309,30 @@ class Renderer(api.PluginRenderer[Data]):
 
         if self.game_over:
             self._draw_game_over(canvas, graphics)
+
+    def _draw_spinning_car(self, canvas, graphics, cx: float, cy: float, state: int) -> None:
+        # A real spin-out: the car's nose (the red end of the stripe order) points
+        # north/east/south/west/north in turn, rather than the car merely squashing
+        # in place. Since CAR_HEIGHT == len(CAR_STRIPE_COLORS_RGB), rotating 90
+        # degrees is just transposing the footprint (width<->height) and picking
+        # which end of the stripe order faces the direction the nose points --
+        # tires are skipped during the spin since they'd need their own rotation to
+        # look right and this is over almost as soon as it's noticed.
+        nose_faces_high_index = state in (1, 2)  # east or south -- red end at the higher x/y edge
+        colors = list(reversed(CAR_STRIPE_COLORS_RGB)) if nose_faces_high_index else CAR_STRIPE_COLORS_RGB
+
+        if state in (0, 2):  # north/south: vertical, same footprint as normal driving
+            width, height = CAR_WIDTH, CAR_HEIGHT
+            x = round(cx - width / 2)
+            y = round(cy - height / 2)
+            for row, rgb in enumerate(colors):
+                graphics.DrawLine(canvas, x, y + row, x + width - 1, y + row, graphics.Color(*rgb))
+        else:  # east/west: horizontal, footprint rotated 90 degrees
+            width, height = CAR_HEIGHT, CAR_WIDTH
+            x = round(cx - width / 2)
+            y = round(cy - height / 2)
+            for col, rgb in enumerate(colors):
+                graphics.DrawLine(canvas, x + col, y, x + col, y + height - 1, graphics.Color(*rgb))
 
     def _draw_lives(self, canvas, graphics) -> None:
         # Hearts represent lives in reserve, not the one currently in play -- with

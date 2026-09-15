@@ -190,6 +190,44 @@ class TestRendererGameplay(unittest.TestCase):
         self.renderer._consume_input()
         self.assertEqual(self.renderer.car_x, start_x)
 
+    def test_car_crash_freezes_frame_count_so_the_road_dashes_stop_too(self):
+        # Eric's feedback: the dashes kept scrolling during a crash, making it look
+        # like only the car had stopped rather than the whole scene. frame_count
+        # drives the dash-scroll position (see _draw), so it must not advance while
+        # the world is frozen.
+        self.renderer.obstacles = [make_car_obstacle(x=float(self.renderer.car_x), y=float(car_y(self.renderer)))]
+        self.renderer._advance()  # triggers the crash
+        frame_count_at_crash = self.renderer.frame_count
+
+        for _ in range(5):
+            self.renderer._advance()
+
+        self.assertEqual(self.renderer.frame_count, frame_count_at_crash)
+
+    def test_oil_spin_out_still_advances_frame_count_so_dashes_keep_scrolling(self):
+        self.renderer.obstacles = [make_oil_obstacle(x=float(self.renderer.car_x), y=float(car_y(self.renderer)))]
+        self.renderer._advance()  # triggers the spin-out
+        frame_count_at_hit = self.renderer.frame_count
+
+        self.renderer._advance()
+
+        self.assertGreater(self.renderer.frame_count, frame_count_at_hit)
+
+    def test_spin_state_cycles_through_all_four_directions_twice(self):
+        # Eric's feedback: the old width-squash read as a cylinder rolling on its
+        # long axis, not a car spinning out. _spin_state should step through all 4
+        # orientations (north/east/south/west), and do it twice across the full
+        # hit_animation_frames duration (2 full spins).
+        seen = []
+        total = self.renderer.config.hit_animation_frames
+        for remaining in range(total, 0, -1):
+            self.renderer.hit_animation_frames_remaining = remaining
+            seen.append(self.renderer._spin_state())
+
+        self.assertEqual(sorted(set(seen)), [0, 1, 2, 3])
+        self.assertEqual(seen.count(0), seen.count(1))  # each direction shown equally long
+        self.assertEqual(seen[: len(seen) // 2], seen[len(seen) // 2 :])  # two identical spin cycles
+
     def test_oil_falls_at_the_road_scroll_speed_not_the_car_obstacle_speed(self):
         # Painted on the road surface, not an independently moving thing -- should
         # scroll at the same rate as the dashes (DASH_SPEED_MULTIPLIER x fall_speed),
