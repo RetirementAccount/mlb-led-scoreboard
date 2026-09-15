@@ -246,20 +246,19 @@ class TestSpaceShooterGameplay(unittest.TestCase):
         self.assertEqual(self.renderer.score, 0)
         self.assertEqual(self.renderer.lives, self.renderer.config.starting_lives)
 
-    def test_supplied_ship_and_enemy_sprites_load_pickup_falls_back(self):
-        # Eric has already supplied ship.png and one enemy variant (UFO1.png);
-        # pickup.png doesn't exist yet, so it should still fall back to None (the
-        # "+" mask) rather than error.
+    def test_supplied_ship_enemy_and_pickup_sprites_all_load(self):
+        # Eric has supplied ship.png, 3 enemy variants (UFO1/2/3.png), and
+        # pickup.png -- confirm every lookup resolves to real art now.
         self.assertIsNotNone(self.renderer._ship_sprite)
-        self.assertEqual(len(self.renderer._enemy_sprites), 1)
-        self.assertIsNone(self.renderer._pickup_sprite)
+        self.assertEqual(len(self.renderer._enemy_sprites), 3)
+        self.assertIsNotNone(self.renderer._pickup_sprite)
 
     def test_enemy_sprite_variants_are_discovered_by_glob_not_a_fixed_list(self):
-        # Adding UFO2.png, UFO3.png, etc. later should need zero code changes --
-        # confirm _load_enemy_sprites actually globs the directory rather than
-        # looking for one hardcoded filename.
+        # Adding UFOn.png later should need zero code changes -- confirm
+        # _load_enemy_sprites actually globs the directory (currently 3 files:
+        # UFO1/2/3.png) rather than looking for one hardcoded filename.
         sprites = self.renderer._load_enemy_sprites()
-        self.assertEqual(len(sprites), 1)
+        self.assertEqual(len(sprites), 3)
 
     def test_ufo_landing_lights_are_auto_detected_from_the_supplied_sprite(self):
         # Eric's UFO1.png has 2 yellow pixels, 3px apart, on its bottom row --
