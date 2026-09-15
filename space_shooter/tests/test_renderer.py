@@ -280,12 +280,19 @@ class TestSpaceShooterGameplay(unittest.TestCase):
         self.assertEqual(len(self.renderer.bullets), 1)  # untouched
         self.assertEqual(self.renderer.gun_level, 1)
 
-    def test_each_gun_level_has_more_or_equal_lanes_than_the_last(self):
+    def test_every_gun_level_is_defined(self):
         for level in range(1, MAX_GUN_LEVEL + 1):
             self.assertIn(level, GUN_LANES)
-        self.assertEqual(len(GUN_LANES[1]), 1)
-        self.assertGreaterEqual(len(GUN_LANES[2]), len(GUN_LANES[1]))
-        self.assertGreaterEqual(len(GUN_LANES[3]), len(GUN_LANES[2]))
+
+    def test_gun_lane_patterns_match_the_current_progression(self):
+        # Reordered per Eric's request: 1 single dash, 2 a lone dot (outer dashes
+        # removed from what used to be level 3), 3 the dot-flanked-by-dashes
+        # pattern (what used to be level 2's two dashes moved to level 4 instead),
+        # 4 two dashes (gets the bonus diagonal dots since it's MAX_GUN_LEVEL).
+        self.assertEqual(GUN_LANES[1], [(0, "dash")])
+        self.assertEqual(GUN_LANES[2], [(0, "dot")])
+        self.assertEqual(GUN_LANES[3], [(-4, "dash"), (0, "dot"), (4, "dash")])
+        self.assertEqual(GUN_LANES[4], [(-2, "dash"), (2, "dash")])
 
     def test_max_gun_level_fires_extra_diagonal_bouncing_bullets(self):
         self.renderer.gun_level = MAX_GUN_LEVEL

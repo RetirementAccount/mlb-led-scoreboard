@@ -43,15 +43,19 @@ DAMAGE_CHUNK_ORDER = ["top_left", "top_right", "bottom_left"]
 
 MAX_GUN_LEVEL = 4
 # Vertical offsets (from the player's center) and shape for each shot lane, by gun
-# level. Level 4 reuses level 3's lanes and adds a pair of diagonal, screen-bouncing
-# dots on top (handled separately in _fire(), since they need their own dy).
+# level: 1 a single center dash, 2 a lone center dot, 3 a dot flanked by two dashes
+# further out, 4 two dashes offset a few px above/below center (plus a pair of
+# diagonal, screen-bouncing dots added on top -- handled separately in _fire(),
+# since they need their own dy).
 GUN_LANES = {
     1: [(0, "dash")],
-    2: [(-2, "dash"), (2, "dash")],
+    2: [(0, "dot")],
     3: [(-4, "dash"), (0, "dot"), (4, "dash")],
-    4: [(-4, "dash"), (0, "dot"), (4, "dash")],
+    4: [(-2, "dash"), (2, "dash")],
 }
-DIAGONAL_BULLET_DY = 1  # pixels/frame vertical component for level 4's bouncing dots
+DIAGONAL_BULLET_DY = 1  # pixels/frame vertical component for level 4's bouncing dots -- these
+# attach to whatever pattern currently occupies MAX_GUN_LEVEL (see _fire()), so
+# reordering GUN_LANES above also moves which shot pattern gets the diagonal bonus.
 
 # Multi-hit enemies alone weren't enough -- the wide/rapid coverage at levels 3-4
 # still trivialized the game, so this also cuts the fire rate by 1/3 (fires 1.5x
