@@ -133,8 +133,8 @@ class TestSpaceShooterGameplay(unittest.TestCase):
 
     def test_enemy_survives_a_non_fatal_hit_and_is_marked_damaged(self):
         # Eric's fix for the upgraded gun trivializing the game: enemies now take
-        # multiple hits (default 2), chipping a corner chunk off instead of
-        # instantly dying. The bullet is still consumed either way.
+        # multiple hits (default 4, per Eric's follow-up), chipping another corner
+        # chunk off per hit instead of instantly dying. Bullet still consumed either way.
         self.renderer.config.enemy_max_hits = 2
         enemy = make_enemy(x=10.0, y=10.0)
         self.renderer.enemies = [enemy]
@@ -156,6 +156,23 @@ class TestSpaceShooterGameplay(unittest.TestCase):
 
         self.assertEqual(self.renderer.enemies, [])
         self.assertEqual(self.renderer.score, ENEMY_KILL_POINTS)
+
+    def test_default_enemy_max_hits_is_four(self):
+        self.assertEqual(self.renderer.config.enemy_max_hits, 4)
+
+    def test_damage_chunks_accumulate_one_per_hit(self):
+        width, height = ENEMY_WIDTH, ENEMY_HEIGHT
+        self.assertEqual(self.renderer._damage_chunks(width, height, 0), [])
+        self.assertEqual(len(self.renderer._damage_chunks(width, height, 1)), 1)
+        self.assertEqual(len(self.renderer._damage_chunks(width, height, 2)), 2)
+        self.assertEqual(len(self.renderer._damage_chunks(width, height, 3)), 3)
+        # A 4th hit destroys the enemy outright (handled in _resolve_collisions),
+        # so there's no 4th corner defined -- accumulation caps at 3 chunks.
+        self.assertEqual(len(self.renderer._damage_chunks(width, height, 4)), 3)
+
+    def test_damage_chunks_are_all_different_corners(self):
+        chunks = self.renderer._damage_chunks(ENEMY_WIDTH, ENEMY_HEIGHT, 3)
+        self.assertEqual(len(set(chunks)), 3)  # no two hits chip the same spot
 
     def test_enemy_colliding_with_the_player_costs_a_life_and_starts_flicker(self):
         self.renderer.enemies = [{"x": float(PLAYER_X), "y": float(self.renderer.player_y)}]

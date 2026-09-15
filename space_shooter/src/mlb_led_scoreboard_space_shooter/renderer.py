@@ -32,9 +32,14 @@ BULLET_DASH_WIDTH = 2  # a horizontal 2px dash, same silhouette as the racer's r
 BULLET_DOT_SIZE = 2  # a 2x2 dot
 
 ENEMY_KILL_POINTS = 10
-# Each non-fatal hit blanks this corner chunk of the enemy's sprite (top-left,
-# toward its nose since it faces left) -- see _resolve_collisions/_draw_enemy.
+# Each non-fatal hit blanks another corner chunk of the enemy's sprite
+# (Centipede-style progressive damage) -- see _resolve_collisions/_draw_enemy.
+# Order: nose (top-left, toward the direction it flies), top-right, bottom-left --
+# leaving the bottom-right/tail corner intact until the destroying hit, so there's
+# always visibly more damage after each non-fatal hit rather than one fixed "hurt"
+# state regardless of how many hits landed.
 DAMAGE_CHUNK_SIZE = 2
+DAMAGE_CHUNK_ORDER = ["top_left", "top_right", "bottom_left"]
 
 MAX_GUN_LEVEL = 4
 # Vertical offsets (from the player's center) and shape for each shot lane, by gun
@@ -433,20 +438,32 @@ class Renderer(api.PluginRenderer[Data]):
             ex, ey = self._ship_engine_pixel
             canvas.SetPixel(x + ex, y + ey, *engine_color)
 
+    @staticmethod
+    def _damage_chunks(width: int, height: int, hits_taken: int) -> list:
+        # One more corner chunk per non-fatal hit, in DAMAGE_CHUNK_ORDER -- e.g. at
+        # hits_taken=2, both the top-left and top-right corners are missing.
+        size = DAMAGE_CHUNK_SIZE
+        corners = {
+            "top_left": (0, 0),
+            "top_right": (max(0, width - size), 0),
+            "bottom_left": (0, max(0, height - size)),
+        }
+        return [corners[name] for name in DAMAGE_CHUNK_ORDER[:hits_taken]]
+
     def _draw_enemy(self, canvas, graphics, sprite_info: Optional[dict], x: int, y: int, hits_taken: int = 0) -> None:
-        damaged = hits_taken > 0
         if sprite_info is None:
-            self._draw_fallback_rect(canvas, graphics, x, y, ENEMY_WIDTH, ENEMY_HEIGHT, ENEMY_RGB, ENEMY_ACCENT_RGB, accent_on_left=True, damaged=damaged)
+            self._draw_fallback_rect(canvas, graphics, x, y, ENEMY_WIDTH, ENEMY_HEIGHT, ENEMY_RGB, ENEMY_ACCENT_RGB, accent_on_left=True, hits_taken=hits_taken)
             return
 
         image = sprite_info["image"]
         light_row = sprite_info["light_row"]
+        chunks = self._damage_chunks(image.width, image.height, hits_taken)
         for px in range(image.width):
             for py in range(image.height):
                 if light_row is not None and py == light_row:
                     continue  # drawn separately below, animated
-                if damaged and px < DAMAGE_CHUNK_SIZE and py < DAMAGE_CHUNK_SIZE:
-                    continue  # a chunk bitten out of the nose corner by an earlier hit
+                if any(cx <= px < cx + DAMAGE_CHUNK_SIZE and cy <= py < cy + DAMAGE_CHUNK_SIZE for cx, cy in chunks):
+                    continue  # bitten out by an earlier hit
                 r, g, b, a = image.getpixel((px, py))
                 if a >= SPRITE_ALPHA_THRESHOLD:
                     canvas.SetPixel(x + px, y + py, r, g, b)
@@ -463,14 +480,15 @@ class Renderer(api.PluginRenderer[Data]):
                 elif body_color is not None:
                     canvas.SetPixel(x + col, y + light_row, *body_color)
 
-    def _draw_fallback_rect(self, canvas, graphics, x: int, y: int, width: int, height: int, body_rgb, accent_rgb, accent_on_left: bool, damaged: bool = False) -> None:
+    def _draw_fallback_rect(self, canvas, graphics, x: int, y: int, width: int, height: int, body_rgb, accent_rgb, accent_on_left: bool, hits_taken: int = 0) -> None:
         body_color = graphics.Color(*body_rgb)
         self._fill_rect(canvas, graphics, x, y, width, height, body_color)
-        if damaged:
-            # Re-punch the same nose-corner chunk _draw_enemy blanks on a sprite,
-            # so the fallback shape shows damage too.
+        if hits_taken > 0:
+            # Re-punch the same progressive corner chunks _draw_enemy blanks on a
+            # sprite, so the fallback shape shows the same damage.
             bg_color = graphics.Color(*SPACE_RGB)
-            self._fill_rect(canvas, graphics, x, y, min(DAMAGE_CHUNK_SIZE, width), min(DAMAGE_CHUNK_SIZE, height), bg_color)
+            for cx, cy in self._damage_chunks(width, height, hits_taken):
+                self._fill_rect(canvas, graphics, x + cx, y + cy, min(DAMAGE_CHUNK_SIZE, width - cx), min(DAMAGE_CHUNK_SIZE, height - cy), bg_color)
         accent_color = graphics.Color(*accent_rgb)
         accent_x = x if accent_on_left else x + width - 1
         graphics.DrawLine(canvas, accent_x, y + height // 2, accent_x, y + height // 2, accent_color)
