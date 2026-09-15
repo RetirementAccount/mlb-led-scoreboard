@@ -5,6 +5,9 @@ from pathlib import Path
 from mlb_led_scoreboard_fruit_catcher.config import Config
 from mlb_led_scoreboard_fruit_catcher.renderer import (
     BASKET_TOP_WIDTH,
+    FRUITS,
+    FUSE_SPARK_CYCLE_RGB,
+    FUSE_SPARK_FRAMES_PER_COLOR,
     OBJECT_WIDTH,
     PLAYFIELD_TOP,
     Renderer,
@@ -188,13 +191,28 @@ class TestFruitCatcherGameplay(unittest.TestCase):
 
         self.assertEqual(self.renderer.objects, [])
 
-    def test_missing_sprite_falls_back_to_none_for_every_item(self):
-        # No PNGs are checked into the repo (that's the point -- Eric supplies his
-        # own), so every lookup should resolve to None and drawing should fall back
-        # to the built-in color blobs rather than erroring.
+    def test_every_fruit_and_bomb_sprite_is_loaded(self):
+        # Eric has supplied real pixel art for every item, checked into
+        # fruit_catcher/.../assets/ -- confirm every lookup resolves to an image
+        # rather than silently falling back to the color blob.
+        expected_keys = {fruit["name"] for fruit in FRUITS} | {"bomb"}
+        self.assertEqual(set(self.renderer._sprites.keys()), expected_keys)
         for key, sprite in self.renderer._sprites.items():
             with self.subTest(key=key):
-                self.assertIsNone(sprite)
+                self.assertIsNotNone(sprite)
+
+    def test_bomb_fuse_pixel_cycles_through_spark_colors_over_time(self):
+        seen = set()
+        for frame in range(0, 20, FUSE_SPARK_FRAMES_PER_COLOR):
+            self.renderer.frame_count = frame
+            seen.add(self.renderer._current_fuse_color())
+        self.assertGreater(len(seen), 1)
+        self.assertTrue(set(seen).issubset(set(FUSE_SPARK_CYCLE_RGB)))
+
+    def test_is_fuse_pixel_matches_yellow_but_not_body_or_background(self):
+        self.assertTrue(Renderer._is_fuse_pixel(255, 242, 0))
+        self.assertFalse(Renderer._is_fuse_pixel(90, 90, 95))  # bomb body gray
+        self.assertFalse(Renderer._is_fuse_pixel(255, 255, 255))  # highlight white
 
     def test_spawned_object_is_within_playfield_bounds(self):
         obj = self.renderer._spawn_object()

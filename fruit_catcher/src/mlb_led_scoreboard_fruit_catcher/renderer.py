@@ -42,6 +42,9 @@ FRUITS = [
     {"name": "orange", "body": (240, 130, 20), "accent": (60, 140, 60)},
     {"name": "apple", "body": (60, 160, 60), "accent": (110, 70, 30)},
     {"name": "banana", "body": (230, 210, 40), "accent": (110, 70, 30)},
+    {"name": "mango", "body": (250, 180, 40), "accent": (60, 120, 40)},
+    {"name": "pear", "body": (200, 220, 80), "accent": (110, 70, 30)},
+    {"name": "strawberry", "body": (220, 20, 60), "accent": (40, 140, 40)},
 ]
 
 BG_RGB = (10, 10, 40)
@@ -54,6 +57,12 @@ BOMB_BODY_RGB = (90, 90, 95)
 BOMB_HIGHLIGHT_RGB = (200, 200, 210)
 BOMB_FUSE_A_RGB = (255, 200, 0)
 BOMB_FUSE_B_RGB = (255, 80, 0)
+# The bomb sprite's fuse spark cycles through these colors like a burning fuse.
+# Any sprite pixel that reads as "yellow" (see _is_fuse_pixel) gets swapped for
+# whichever color is current, so this works on Eric's bomb.png without needing to
+# know its exact pixel layout.
+FUSE_SPARK_CYCLE_RGB = [(255, 242, 0), (255, 160, 0), (255, 60, 0), (255, 160, 0)]
+FUSE_SPARK_FRAMES_PER_COLOR = 2
 SCORE_RGB = (255, 255, 255)
 LIFE_PIP_RGB = (220, 160, 40)
 LIFE_PIP_EMPTY_RGB = (50, 50, 50)
@@ -241,7 +250,7 @@ class Renderer(api.PluginRenderer[Data]):
         sprite_key = "bomb" if obj["type"] == "bomb" else FRUITS[obj["fruit_index"]]["name"]
         sprite = self._sprites.get(sprite_key)
         if sprite is not None:
-            self._draw_sprite(canvas, sprite, x, y)
+            self._draw_sprite(canvas, sprite, x, y, animate_fuse=obj["type"] == "bomb")
             return
 
         if obj["type"] == "bomb":
@@ -261,14 +270,26 @@ class Renderer(api.PluginRenderer[Data]):
         self._fill_rect(canvas, graphics, x, y + 1, OBJECT_WIDTH, OBJECT_HEIGHT - 1, body_color)
         graphics.DrawLine(canvas, x + 1, y, x + 1, y, accent_color)
 
-    def _draw_sprite(self, canvas, sprite: "Image.Image", x: int, y: int) -> None:
+    def _draw_sprite(self, canvas, sprite: "Image.Image", x: int, y: int, animate_fuse: bool = False) -> None:
         # Same per-pixel alpha-composited blit as espn_sports' team logos -- see
         # espn_sports/renderer.py's _draw_image for the precedent.
+        fuse_color = self._current_fuse_color() if animate_fuse else None
         for px in range(sprite.width):
             for py in range(sprite.height):
                 r, g, b, a = sprite.getpixel((px, py))
-                if a >= SPRITE_ALPHA_THRESHOLD:
-                    canvas.SetPixel(x + px, y + py, r, g, b)
+                if a < SPRITE_ALPHA_THRESHOLD:
+                    continue
+                if fuse_color is not None and self._is_fuse_pixel(r, g, b):
+                    r, g, b = fuse_color
+                canvas.SetPixel(x + px, y + py, r, g, b)
+
+    def _current_fuse_color(self) -> tuple:
+        idx = (self.frame_count // FUSE_SPARK_FRAMES_PER_COLOR) % len(FUSE_SPARK_CYCLE_RGB)
+        return FUSE_SPARK_CYCLE_RGB[idx]
+
+    @staticmethod
+    def _is_fuse_pixel(r: int, g: int, b: int) -> bool:
+        return r > 200 and g > 180 and b < 120
 
     def _draw_catcher(self, canvas, graphics, x: int, y: int, width_scale: float) -> None:
         weave_a = graphics.Color(*BASKET_WEAVE_A_RGB)
