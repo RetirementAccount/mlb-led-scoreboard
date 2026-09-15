@@ -10,3 +10,4 @@ bdfparser
 ./toddler_racer
 ./game_menu
 ./fruit_catcher
+./space_shooter

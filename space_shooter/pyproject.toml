@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlb-led-scoreboard-space-shooter"
+version = "0.1.0"
+description = "A simple side-scrolling space shooter (Defender-lite) for the LED scoreboard's game suite"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.entry-points.'bullpen.mlbled.plugin']
+"shooter" = "mlb_led_scoreboard_space_shooter:load"
