@@ -73,6 +73,18 @@ class MainRenderer:
     def __render_games(self):
         seen_games = set()
         while True:
+            if self.data.game_mode.is_active():
+                # Ending the current game's own display loop (via with_pause_and_skip
+                # below) isn't enough on its own: this outer loop would otherwise just
+                # immediately fetch the next game and try again, with no sleep and no
+                # way out if self.data.games.next() keeps returning the same stale game
+                # (a real possibility -- see the DoubleBuffer note below) -- a tight
+                # infinite spin that never reaches render()'s top-level dispatch to the
+                # racer plugin, and looks exactly like a frozen display. Confirmed on
+                # real hardware: pressing G to enter game mode just froze the current
+                # MLB frame instead of switching.
+                return
+
             self.scrolling_text_pos = self.canvas.width
 
             game = self.data.games.next()
