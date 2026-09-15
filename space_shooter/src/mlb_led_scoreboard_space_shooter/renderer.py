@@ -43,19 +43,19 @@ DAMAGE_CHUNK_ORDER = ["top_left", "top_right", "bottom_left"]
 
 MAX_GUN_LEVEL = 4
 # Vertical offsets (from the player's center) and shape for each shot lane, by gun
-# level: 1 a single center dash, 2 a lone center dot, 3 a dot flanked by two dashes
-# further out, 4 two dashes offset a few px above/below center (plus a pair of
-# diagonal, screen-bouncing dots added on top -- handled separately in _fire(),
-# since they need their own dy).
+# level: 1 a single center dash, 2 a lone center dot, 3 two dashes offset a few px
+# above/below center for wider coverage, 4 a flashing dot ("flash_dot" -- see
+# GUN4_FLASH_CYCLE_RGB) flanked by two dashes further out.
 GUN_LANES = {
     1: [(0, "dash")],
     2: [(0, "dot")],
-    3: [(-4, "dash"), (0, "dot"), (4, "dash")],
-    4: [(-2, "dash"), (2, "dash")],
+    3: [(-2, "dash"), (2, "dash")],
+    4: [(-4, "dash"), (0, "flash_dot"), (4, "dash")],
 }
-DIAGONAL_BULLET_DY = 1  # pixels/frame vertical component for level 4's bouncing dots -- these
-# attach to whatever pattern currently occupies MAX_GUN_LEVEL (see _fire()), so
-# reordering GUN_LANES above also moves which shot pattern gets the diagonal bonus.
+# Level 4's center dot cycles red -> orange -> yellow, same color-cycling technique
+# as the ship's engine pixel / fruit_catcher's bomb fuse.
+GUN4_FLASH_CYCLE_RGB = [(220, 30, 30), (255, 140, 0), (255, 220, 0)]
+GUN4_FLASH_FRAMES_PER_COLOR = 2
 
 # Multi-hit enemies alone weren't enough -- the wide/rapid coverage at levels 3-4
 # still trivialized the game, so this also cuts the fire rate by 1/3 (fires 1.5x
@@ -235,6 +235,10 @@ class Renderer(api.PluginRenderer[Data]):
         idx = (self.frame_count // ENGINE_FLAME_FRAMES_PER_COLOR) % len(ENGINE_FLAME_CYCLE_RGB)
         return ENGINE_FLAME_CYCLE_RGB[idx]
 
+    def _current_gun4_flash_color(self) -> tuple:
+        idx = (self.frame_count // GUN4_FLASH_FRAMES_PER_COLOR) % len(GUN4_FLASH_CYCLE_RGB)
+        return GUN4_FLASH_CYCLE_RGB[idx]
+
     def wait_time(self) -> float:
         return self.config.frame_seconds
 
@@ -332,11 +336,6 @@ class Renderer(api.PluginRenderer[Data]):
     def _move_bullets(self) -> None:
         for bullet in self.bullets:
             bullet["x"] += self.config.bullet_speed
-            if bullet["dy"] != 0:
-                bullet["y"] += bullet["dy"]
-                size = self._bullet_size(bullet)
-                if bullet["y"] <= 0 or bullet["y"] >= self.height - size:
-                    bullet["dy"] *= -1
         self.bullets = [b for b in self.bullets if b["x"] < self.width]
 
     def _resolve_collisions(self) -> None:
@@ -369,7 +368,7 @@ class Renderer(api.PluginRenderer[Data]):
             self.gun_level = min(MAX_GUN_LEVEL, self.gun_level + 1)
 
     def _bullet_size(self, bullet: dict) -> int:
-        return BULLET_DOT_SIZE if bullet["shape"] == "dot" else BULLET_DASH_WIDTH
+        return BULLET_DOT_SIZE if bullet["shape"] in ("dot", "flash_dot") else BULLET_DASH_WIDTH
 
     def _overlaps_player(self, entity: dict, width: int, height: int) -> bool:
         return self._overlaps(entity["x"], entity["y"], width, height, PLAYER_X, self.player_y, PLAYER_WIDTH, PLAYER_HEIGHT)
@@ -391,11 +390,7 @@ class Renderer(api.PluginRenderer[Data]):
         center_y = self.player_y + PLAYER_HEIGHT / 2
         origin_x = float(PLAYER_X + PLAYER_WIDTH)
         for offset, shape in GUN_LANES[self.gun_level]:
-            self.bullets.append({"x": origin_x, "y": center_y + offset, "shape": shape, "dy": 0.0})
-
-        if self.gun_level == MAX_GUN_LEVEL:
-            for dy in (-DIAGONAL_BULLET_DY, DIAGONAL_BULLET_DY):
-                self.bullets.append({"x": origin_x, "y": center_y, "shape": "dot", "dy": float(dy)})
+            self.bullets.append({"x": origin_x, "y": center_y + offset, "shape": shape})
 
     def _draw(self, canvas, graphics) -> None:
         canvas.Fill(*SPACE_RGB)
@@ -416,9 +411,12 @@ class Renderer(api.PluginRenderer[Data]):
                 self._draw_mask(canvas, graphics, PICKUP_MASK, x, y, graphics.Color(*PICKUP_RGB))
 
         bullet_color = graphics.Color(*BULLET_RGB)
+        flash_color = graphics.Color(*self._current_gun4_flash_color())
         for bullet in self.bullets:
             x, y = int(bullet["x"]), int(bullet["y"])
-            if bullet["shape"] == "dot":
+            if bullet["shape"] == "flash_dot":
+                self._fill_rect(canvas, graphics, x, y, BULLET_DOT_SIZE, BULLET_DOT_SIZE, flash_color)
+            elif bullet["shape"] == "dot":
                 self._fill_rect(canvas, graphics, x, y, BULLET_DOT_SIZE, BULLET_DOT_SIZE, bullet_color)
             else:
                 graphics.DrawLine(canvas, x, y, x + BULLET_DASH_WIDTH - 1, y, bullet_color)

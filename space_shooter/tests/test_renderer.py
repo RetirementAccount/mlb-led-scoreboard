@@ -12,6 +12,8 @@ from mlb_led_scoreboard_space_shooter.renderer import (
     FIRE_RATE_CORRECTION,
     FIRE_RATE_NERF_GUN_LEVEL,
     FIRE_RATE_NERF_MULTIPLIER,
+    GUN4_FLASH_CYCLE_RGB,
+    GUN4_FLASH_FRAMES_PER_COLOR,
     GUN_LANES,
     LIGHT_CHASE_FRAMES_PER_STEP,
     LOW_LEVEL_FIRE_RATE_MULTIPLIER,
@@ -132,7 +134,7 @@ class TestSpaceShooterGameplay(unittest.TestCase):
     def test_bullet_destroys_a_one_hit_enemy_and_scores_points(self):
         self.renderer.config.enemy_max_hits = 1
         self.renderer.enemies = [make_enemy(x=10.0, y=10.0)]
-        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash", "dy": 0.0}]
+        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash"}]
 
         self.renderer._resolve_collisions()
 
@@ -147,7 +149,7 @@ class TestSpaceShooterGameplay(unittest.TestCase):
         self.renderer.config.enemy_max_hits = 2
         enemy = make_enemy(x=10.0, y=10.0)
         self.renderer.enemies = [enemy]
-        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash", "dy": 0.0}]
+        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash"}]
 
         self.renderer._resolve_collisions()
 
@@ -159,7 +161,7 @@ class TestSpaceShooterGameplay(unittest.TestCase):
     def test_enemy_is_destroyed_on_the_hit_that_reaches_max_hits(self):
         self.renderer.config.enemy_max_hits = 2
         self.renderer.enemies = [make_enemy(x=10.0, y=10.0, hits_taken=1)]
-        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash", "dy": 0.0}]
+        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash"}]
 
         self.renderer._resolve_collisions()
 
@@ -272,7 +274,7 @@ class TestSpaceShooterGameplay(unittest.TestCase):
 
     def test_bullets_pass_through_the_pickup_without_collecting_it(self):
         self.renderer.pickups = [{"x": 10.0, "y": 10.0}]
-        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash", "dy": 0.0}]
+        self.renderer.bullets = [{"x": 10.0, "y": 10.0, "shape": "dash"}]
 
         self.renderer._resolve_collisions()
 
@@ -285,31 +287,28 @@ class TestSpaceShooterGameplay(unittest.TestCase):
             self.assertIn(level, GUN_LANES)
 
     def test_gun_lane_patterns_match_the_current_progression(self):
-        # Reordered per Eric's request: 1 single dash, 2 a lone dot (outer dashes
-        # removed from what used to be level 3), 3 the dot-flanked-by-dashes
-        # pattern (what used to be level 2's two dashes moved to level 4 instead),
-        # 4 two dashes (gets the bonus diagonal dots since it's MAX_GUN_LEVEL).
+        # Per Eric's exact spec: 1 single dash, 2 a lone dot, 3 two dashes offset a
+        # few px above/below center, 4 a flashing dot flanked by two dashes further
+        # out (the diagonal bouncing bullets from an earlier iteration are gone).
         self.assertEqual(GUN_LANES[1], [(0, "dash")])
         self.assertEqual(GUN_LANES[2], [(0, "dot")])
-        self.assertEqual(GUN_LANES[3], [(-4, "dash"), (0, "dot"), (4, "dash")])
-        self.assertEqual(GUN_LANES[4], [(-2, "dash"), (2, "dash")])
+        self.assertEqual(GUN_LANES[3], [(-2, "dash"), (2, "dash")])
+        self.assertEqual(GUN_LANES[4], [(-4, "dash"), (0, "flash_dot"), (4, "dash")])
 
-    def test_max_gun_level_fires_extra_diagonal_bouncing_bullets(self):
+    def test_gun4_center_dot_flashes_red_orange_yellow(self):
         self.renderer.gun_level = MAX_GUN_LEVEL
         self.renderer._fire()
-        diagonal = [b for b in self.renderer.bullets if b["dy"] != 0]
-        self.assertEqual(len(diagonal), 2)
+        flashing = [b for b in self.renderer.bullets if b["shape"] == "flash_dot"]
+        self.assertEqual(len(flashing), 1)
 
-    def test_diagonal_bullet_bounces_off_the_top_and_bottom_edges(self):
-        bullet = {"x": 10.0, "y": 0.0, "shape": "dot", "dy": -1.0}
-        self.renderer.bullets = [bullet]
-
-        self.renderer._move_bullets()
-
-        self.assertEqual(bullet["dy"], 1.0)  # flipped after hitting the top edge
+        seen = set()
+        for frame in range(0, GUN4_FLASH_FRAMES_PER_COLOR * len(GUN4_FLASH_CYCLE_RGB) * 2, GUN4_FLASH_FRAMES_PER_COLOR):
+            self.renderer.frame_count = frame
+            seen.add(self.renderer._current_gun4_flash_color())
+        self.assertEqual(seen, set(GUN4_FLASH_CYCLE_RGB))
 
     def test_bullet_despawns_past_the_right_edge(self):
-        self.renderer.bullets = [{"x": float(self.renderer.width), "y": 10.0, "shape": "dash", "dy": 0.0}]
+        self.renderer.bullets = [{"x": float(self.renderer.width), "y": 10.0, "shape": "dash"}]
 
         self.renderer._move_bullets()
 
@@ -406,7 +405,7 @@ class TestSpaceShooterGameplay(unittest.TestCase):
         self.renderer.game_over = True
         self.renderer.enemies = [{"x": 1.0, "y": 1.0}]
         self.renderer.pickups = [{"x": 1.0, "y": 1.0}]
-        self.renderer.bullets = [{"x": 1.0, "y": 1.0, "shape": "dash", "dy": 0.0}]
+        self.renderer.bullets = [{"x": 1.0, "y": 1.0, "shape": "dash"}]
 
         self.renderer._reset_game()
 
