@@ -315,13 +315,13 @@ class Renderer(api.PluginRenderer[Data]):
         # north/east/south/west/north in turn, rather than the car merely squashing
         # in place. Since CAR_HEIGHT == len(CAR_STRIPE_COLORS_RGB), rotating 90
         # degrees is just transposing the footprint (width<->height) and picking
-        # which end of the stripe order faces the direction the nose points --
-        # tires are skipped during the spin since they'd need their own rotation to
-        # look right and this is over almost as soon as it's noticed.
+        # which end of the stripe order faces the direction the nose points. Tires
+        # rotate along with the body via _draw_tires' vertical flag.
         nose_faces_high_index = state in (1, 2)  # east or south -- red end at the higher x/y edge
         colors = list(reversed(CAR_STRIPE_COLORS_RGB)) if nose_faces_high_index else CAR_STRIPE_COLORS_RGB
+        vertical = state in (0, 2)  # north/south: same footprint as normal driving
 
-        if state in (0, 2):  # north/south: vertical, same footprint as normal driving
+        if vertical:
             width, height = CAR_WIDTH, CAR_HEIGHT
             x = round(cx - width / 2)
             y = round(cy - height / 2)
@@ -333,6 +333,8 @@ class Renderer(api.PluginRenderer[Data]):
             y = round(cy - height / 2)
             for col, rgb in enumerate(colors):
                 graphics.DrawLine(canvas, x + col, y, x + col, y + height - 1, graphics.Color(*rgb))
+
+        self._draw_tires(canvas, graphics, x, y, width, height, vertical=vertical)
 
     def _draw_lives(self, canvas, graphics) -> None:
         # Hearts represent lives in reserve, not the one currently in play -- with
@@ -371,17 +373,32 @@ class Renderer(api.PluginRenderer[Data]):
         x = center_text_position(text, canvas.width // 2, self.title_font["size"]["width"])
         graphics.DrawText(canvas, self.title_font["font"], x, self.height // 2, color, text)
 
-    def _draw_tires(self, canvas, graphics, x: int, y: int, width: int, height: int) -> None:
-        # Four tire nubs poking out to each side of a (narrower) vertical car body: one
-        # pair near the front (top), one pair near the rear (bottom). Shared between
-        # the player car and the obstacle "cars" so they read as the same kind of thing.
+    def _draw_tires(self, canvas, graphics, x: int, y: int, width: int, height: int, vertical: bool = True) -> None:
+        # Four tire nubs poking out to each side of the car body: one pair near each
+        # end of the body's long axis. Shared between the player car (both driving
+        # normally and mid-spin, see _draw_spinning_car) and the obstacle "cars" so
+        # they all read as the same kind of thing.
+        #
+        # `vertical` picks which axis is the "long" one: True for a normal
+        # top-to-bottom body (tires bulge left/right, one pair near the top, one
+        # near the bottom); False for a body rotated 90 degrees into a left-to-right
+        # shape (tires bulge top/bottom instead, one pair near the left end, one
+        # near the right).
         tire_color = graphics.Color(*TIRE_RGB)
-        left_x = x - TIRE_WIDTH
-        right_x = x + width
-        rear_y = y + height - TIRE_HEIGHT
-        for tire_x in (left_x, right_x):
-            self._fill_rect(canvas, graphics, tire_x, y, TIRE_WIDTH, TIRE_HEIGHT, tire_color)
-            self._fill_rect(canvas, graphics, tire_x, rear_y, TIRE_WIDTH, TIRE_HEIGHT, tire_color)
+        if vertical:
+            near_x = x - TIRE_WIDTH
+            far_x = x + width
+            far_along = y + height - TIRE_HEIGHT
+            for tire_x in (near_x, far_x):
+                self._fill_rect(canvas, graphics, tire_x, y, TIRE_WIDTH, TIRE_HEIGHT, tire_color)
+                self._fill_rect(canvas, graphics, tire_x, far_along, TIRE_WIDTH, TIRE_HEIGHT, tire_color)
+        else:
+            near_y = y - TIRE_WIDTH
+            far_y = y + height
+            far_along = x + width - TIRE_HEIGHT
+            for tire_y in (near_y, far_y):
+                self._fill_rect(canvas, graphics, x, tire_y, TIRE_HEIGHT, TIRE_WIDTH, tire_color)
+                self._fill_rect(canvas, graphics, far_along, tire_y, TIRE_HEIGHT, TIRE_WIDTH, tire_color)
 
     def _fill_rect(self, canvas, graphics, x: int, y: int, w: int, h: int, color) -> None:
         for row in range(h):
