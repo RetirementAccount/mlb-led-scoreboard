@@ -4,6 +4,8 @@ DEFAULT_STEER_STEP = 3  # pixels the car moves per L/R click
 DEFAULT_FALL_SPEED = 1.0  # pixels per frame the obstacles fall
 DEFAULT_SPAWN_INTERVAL_FRAMES = 25  # roughly how often a new obstacle appears
 DEFAULT_FRAME_SECONDS = 0.1  # ~10fps -- smooth enough on an LED matrix, gentle enough for a toddler
+DEFAULT_STARTING_LIVES = 3
+DEFAULT_HIT_ANIMATION_FRAMES = 20  # ~2s at 0.1s/frame -- car "spins", gameplay paused (same as fruit_catcher)
 
 
 class Config(api.PluginConfig):
@@ -13,3 +15,5 @@ class Config(api.PluginConfig):
         self.fall_speed = plugin_config.get("fall_speed", DEFAULT_FALL_SPEED)
         self.spawn_interval_frames = plugin_config.get("spawn_interval_frames", DEFAULT_SPAWN_INTERVAL_FRAMES)
         self.frame_seconds = plugin_config.get("frame_seconds", DEFAULT_FRAME_SECONDS)
+        self.starting_lives = plugin_config.get("starting_lives", DEFAULT_STARTING_LIVES)
+        self.hit_animation_frames = plugin_config.get("hit_animation_frames", DEFAULT_HIT_ANIMATION_FRAMES)
