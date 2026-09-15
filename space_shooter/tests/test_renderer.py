@@ -9,6 +9,7 @@ from mlb_led_scoreboard_space_shooter.renderer import (
     ENEMY_WIDTH,
     ENGINE_FLAME_CYCLE_RGB,
     ENGINE_FLAME_FRAMES_PER_COLOR,
+    FIRE_RATE_CORRECTION,
     FIRE_RATE_NERF_GUN_LEVEL,
     FIRE_RATE_NERF_MULTIPLIER,
     GUN_LANES,
@@ -111,9 +112,11 @@ class TestSpaceShooterGameplay(unittest.TestCase):
 
     def test_fire_rate_is_halved_below_the_nerf_gun_level(self):
         # Eric's follow-up: levels 1-2 should also fire slower, at half the base
-        # rate (independent of the level 3+ nerf below).
+        # rate (independent of the level 3+ nerf below) -- then FIRE_RATE_CORRECTION
+        # scales the final interval back down since the combined effect ended up
+        # too slow overall.
         self.renderer.gun_level = FIRE_RATE_NERF_GUN_LEVEL - 1
-        expected = round(self.renderer.config.fire_interval_frames * LOW_LEVEL_FIRE_RATE_MULTIPLIER)
+        expected = round(self.renderer.config.fire_interval_frames * LOW_LEVEL_FIRE_RATE_MULTIPLIER / FIRE_RATE_CORRECTION)
         self.assertEqual(self.renderer._current_fire_interval(), expected)
         self.assertGreater(expected, self.renderer.config.fire_interval_frames)
 
@@ -121,11 +124,10 @@ class TestSpaceShooterGameplay(unittest.TestCase):
         # Eric's feedback: multi-hit enemies alone weren't enough once the gun got
         # wide/fast -- this also slows the fire rate by 1/3 from that level up,
         # computed from the same base interval as the low-level halving (not
-        # compounded on top of it).
+        # compounded on top of it), then also corrected by FIRE_RATE_CORRECTION.
         self.renderer.gun_level = FIRE_RATE_NERF_GUN_LEVEL
-        expected = round(self.renderer.config.fire_interval_frames * FIRE_RATE_NERF_MULTIPLIER)
+        expected = round(self.renderer.config.fire_interval_frames * FIRE_RATE_NERF_MULTIPLIER / FIRE_RATE_CORRECTION)
         self.assertEqual(self.renderer._current_fire_interval(), expected)
-        self.assertGreater(expected, self.renderer.config.fire_interval_frames)
 
     def test_bullet_destroys_a_one_hit_enemy_and_scores_points(self):
         self.renderer.config.enemy_max_hits = 1

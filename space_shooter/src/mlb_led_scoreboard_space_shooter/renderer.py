@@ -61,6 +61,11 @@ FIRE_RATE_NERF_MULTIPLIER = 1.5
 # Levels 1-2 fire at half the base rate (interval doubled) -- independent of the
 # level 3+ nerf above, both computed from the same config.fire_interval_frames base.
 LOW_LEVEL_FIRE_RATE_MULTIPLIER = 2.0
+# Both bands above ended up firing too infrequently once combined -- this scales the
+# final interval back down, increasing the actual fire rate by 50% (rate x1.5 ==
+# interval /1.5) uniformly across every gun level, without changing the relative
+# balance between the low-level and high-level bands above.
+FIRE_RATE_CORRECTION = 1.5
 
 # Eric's ship.png has a single orange pixel on its back row that he wants to pulse
 # orange -> yellow -> red like a rocket engine, the same color-cycling trick
@@ -295,8 +300,10 @@ class Renderer(api.PluginRenderer[Data]):
 
     def _current_fire_interval(self) -> int:
         if self.gun_level >= FIRE_RATE_NERF_GUN_LEVEL:
-            return round(self.config.fire_interval_frames * FIRE_RATE_NERF_MULTIPLIER)
-        return round(self.config.fire_interval_frames * LOW_LEVEL_FIRE_RATE_MULTIPLIER)
+            band_multiplier = FIRE_RATE_NERF_MULTIPLIER
+        else:
+            band_multiplier = LOW_LEVEL_FIRE_RATE_MULTIPLIER
+        return round(self.config.fire_interval_frames * band_multiplier / FIRE_RATE_CORRECTION)
 
     def _move_stars(self) -> None:
         for star in self.stars:
