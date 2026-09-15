@@ -55,9 +55,12 @@ DIAGONAL_BULLET_DY = 1  # pixels/frame vertical component for level 4's bouncing
 
 # Multi-hit enemies alone weren't enough -- the wide/rapid coverage at levels 3-4
 # still trivialized the game, so this also cuts the fire rate by 1/3 (fires 1.5x
-# less often) once the gun reaches that point. Levels 1-2 fire at the base rate.
+# less often) once the gun reaches that point.
 FIRE_RATE_NERF_GUN_LEVEL = 3
 FIRE_RATE_NERF_MULTIPLIER = 1.5
+# Levels 1-2 fire at half the base rate (interval doubled) -- independent of the
+# level 3+ nerf above, both computed from the same config.fire_interval_frames base.
+LOW_LEVEL_FIRE_RATE_MULTIPLIER = 2.0
 
 # Eric's ship.png has a single orange pixel on its back row that he wants to pulse
 # orange -> yellow -> red like a rocket engine, the same color-cycling trick
@@ -293,7 +296,7 @@ class Renderer(api.PluginRenderer[Data]):
     def _current_fire_interval(self) -> int:
         if self.gun_level >= FIRE_RATE_NERF_GUN_LEVEL:
             return round(self.config.fire_interval_frames * FIRE_RATE_NERF_MULTIPLIER)
-        return self.config.fire_interval_frames
+        return round(self.config.fire_interval_frames * LOW_LEVEL_FIRE_RATE_MULTIPLIER)
 
     def _move_stars(self) -> None:
         for star in self.stars:

@@ -13,6 +13,7 @@ from mlb_led_scoreboard_space_shooter.renderer import (
     FIRE_RATE_NERF_MULTIPLIER,
     GUN_LANES,
     LIGHT_CHASE_FRAMES_PER_STEP,
+    LOW_LEVEL_FIRE_RATE_MULTIPLIER,
     MAX_GUN_LEVEL,
     PICKUP_HEIGHT,
     PICKUP_WIDTH,
@@ -104,17 +105,23 @@ class TestSpaceShooterGameplay(unittest.TestCase):
 
     def test_auto_fire_spawns_a_bullet_without_any_button(self):
         self.assertEqual(len(self.renderer.bullets), 0)
-        for _ in range(self.renderer.config.fire_interval_frames):
+        for _ in range(self.renderer._current_fire_interval()):
             self.renderer._advance()
         self.assertGreater(len(self.renderer.bullets), 0)
 
-    def test_fire_rate_is_unchanged_below_the_nerf_gun_level(self):
+    def test_fire_rate_is_halved_below_the_nerf_gun_level(self):
+        # Eric's follow-up: levels 1-2 should also fire slower, at half the base
+        # rate (independent of the level 3+ nerf below).
         self.renderer.gun_level = FIRE_RATE_NERF_GUN_LEVEL - 1
-        self.assertEqual(self.renderer._current_fire_interval(), self.renderer.config.fire_interval_frames)
+        expected = round(self.renderer.config.fire_interval_frames * LOW_LEVEL_FIRE_RATE_MULTIPLIER)
+        self.assertEqual(self.renderer._current_fire_interval(), expected)
+        self.assertGreater(expected, self.renderer.config.fire_interval_frames)
 
     def test_fire_rate_is_nerfed_by_a_third_at_and_above_the_nerf_gun_level(self):
         # Eric's feedback: multi-hit enemies alone weren't enough once the gun got
-        # wide/fast -- this also slows the fire rate by 1/3 from that level up.
+        # wide/fast -- this also slows the fire rate by 1/3 from that level up,
+        # computed from the same base interval as the low-level halving (not
+        # compounded on top of it).
         self.renderer.gun_level = FIRE_RATE_NERF_GUN_LEVEL
         expected = round(self.renderer.config.fire_interval_frames * FIRE_RATE_NERF_MULTIPLIER)
         self.assertEqual(self.renderer._current_fire_interval(), expected)
