@@ -197,8 +197,10 @@ class Renderer(api.PluginRenderer[Data]):
     def _spin_scale(self) -> float:
         # Same squash-cycle trick as fruit_catcher's basket -- true rotation isn't
         # feasible at this pixel budget, but a horizontal squash (full width -> thin
-        # sliver -> full width, repeating) reads clearly enough as "dazed" for a car
-        # that's only 3px wide to begin with.
+        # sliver -> full width, repeating) reads as a "spin" for a car that's only
+        # 3px wide to begin with. hit_animation_frames (16) is exactly 2x
+        # SPIN_CYCLE_FRAMES (8), so the car completes two full spins in place per
+        # Eric's request before the race unfreezes.
         elapsed = self.config.hit_animation_frames - self.hit_animation_frames_remaining
         pos = elapsed % SPIN_CYCLE_FRAMES
         half = SPIN_CYCLE_FRAMES // 2

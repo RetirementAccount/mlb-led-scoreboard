@@ -11,6 +11,7 @@ from mlb_led_scoreboard_toddler_racer.renderer import (
     HEART_MASK,
     OBSTACLE_WIDTH,
     Renderer,
+    SPIN_CYCLE_FRAMES,
 )
 
 
@@ -123,6 +124,27 @@ class TestRendererGameplay(unittest.TestCase):
         self.renderer._advance()
 
         self.assertEqual(self.renderer.obstacles, [])
+
+    def test_default_hit_animation_is_exactly_two_full_spins(self):
+        # Eric's request: the car should spin 360 degrees twice in place before the
+        # race resumes. SPIN_CYCLE_FRAMES is one full squash-cycle "spin" (see
+        # _spin_scale), so the default hit_animation_frames should be exactly double.
+        self.assertEqual(self.renderer.config.hit_animation_frames, 2 * SPIN_CYCLE_FRAMES)
+
+    def test_race_stays_frozen_for_the_entire_hit_animation(self):
+        # A second obstacle spawning or moving mid-animation would risk hitting the
+        # car again before the player could react -- nothing should advance until
+        # the full spin animation (not just one frame of it) finishes.
+        self.renderer.obstacles = [{"x": float(self.renderer.car_x), "y": float(car_y(self.renderer))}]
+        self.renderer._advance()  # triggers the collision and starts the animation
+        total_frames = self.renderer.hit_animation_frames_remaining
+
+        for _ in range(total_frames - 1):
+            self.renderer._advance()
+            self.assertEqual(self.renderer.obstacles, [])
+            self.assertFalse(self.renderer.game_over)
+
+        self.assertGreater(self.renderer.hit_animation_frames_remaining, 0)
 
     def test_gameplay_is_frozen_during_the_hit_animation(self):
         self.renderer.hit_animation_frames_remaining = 5
