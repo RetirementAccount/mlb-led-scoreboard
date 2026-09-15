@@ -387,7 +387,7 @@ This fork adds live control from a small USB/RF wireless keypad (tested with a R
 
 **Touchpad L/R click buttons:** move the game menu's cursor one slot per click, or steer a game's player object. Holding either button down moves continuously (not just one bump per click) for games that use it that way.
 
-**The game area:** pressing `G` opens a menu (`game_menu`) listing the available games — currently a toddler-friendly racer ("Racer") and a falling-fruit catcher ("Fruit Catch") — plus "Exit". `G` acts as a "back one step" button: from the normal ticker it opens the menu; from inside a game it returns to the menu (not all the way out); from the menu itself it exits back to the ticker. The game area always takes over the display exclusively while active, and the display always boots back into the normal ticker rotation regardless of what was left open before a restart.
+**The game area:** pressing `G` opens a menu (`game_menu`) listing the available games — currently a toddler-friendly racer ("Racer"), a falling-fruit catcher ("Fruit Catch"), and a side-scrolling shooter ("Shooter") — plus "Exit". `G` acts as a "back one step" button: from the normal ticker it opens the menu; from inside a game it returns to the menu (not all the way out); from the menu itself it exits back to the ticker. The game area always takes over the display exclusively while active, and the display always boots back into the normal ticker rotation regardless of what was left open before a restart.
 
 **Over SSH**, without physical hardware, every keypad action has an equivalent `./toggle_rotation.py` command:
 ```
