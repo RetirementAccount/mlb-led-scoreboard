@@ -9,3 +9,4 @@ bdfparser
 ./espn_sports
 ./toddler_racer
 ./game_menu
+./fruit_catcher

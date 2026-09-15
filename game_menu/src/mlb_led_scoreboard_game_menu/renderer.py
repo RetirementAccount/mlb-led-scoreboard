@@ -11,13 +11,14 @@ from .data import Data
 # to change for it to show up and be launchable.
 AVAILABLE_GAMES = [
     ("racer", "Racer"),
+    ("fruit_catcher", "Fruit Catch"),
 ]
 EXIT_SENTINEL = "__exit__"
 EXIT_LABEL = "Exit"
 
-TITLE_Y = 7
-OPTION_START_Y = 16
-OPTION_LINE_HEIGHT = 8
+TITLE_Y = 6
+OPTION_START_Y = 14
+OPTION_LINE_HEIGHT = 7  # tight enough that 3+ options (now: Racer, Fruit Catch, Exit) still fit within 32px tall
 
 BG_RGB = (0, 0, 0)
 TITLE_RGB = (255, 255, 255)
