@@ -61,7 +61,7 @@ class MainRenderer:
                 if t := self.data.config.screen_time_at_priority(plugin, self.data.schedule.priority):
                     LOGGER.debug("Rotating to plugin %s for %d seconds", plugin, t)
                     cond = with_pause_and_skip(
-                        self.data.rotation_control, any_of(timer_cond(t), self.scrolling_finished_cond())
+                        self.data, any_of(timer_cond(t), self.scrolling_finished_cond())
                     )
                     self.__draw_plugin_screen(plugin, cond)
                     drew_anything = True
@@ -95,7 +95,7 @@ class MainRenderer:
             LOGGER.debug("Render thread: showing game %d / %d", len(seen_games), self.data.schedule.num_games())
 
             cond = with_pause_and_skip(
-                self.data.rotation_control,
+                self.data,
                 any_of(
                     timer_cond(self.data.config.rotate_rate_for_status(game.status())),
                     self.scrolling_finished_cond(),
@@ -278,19 +278,25 @@ def any_of(*conds) -> Callable[[], bool]:
     return cond
 
 
-def with_pause_and_skip(control, base_cond: Callable[[], bool]) -> Callable[[], bool]:
-    """Wrap a screen's display condition with live pause/skip control.
+def with_pause_and_skip(data: Data, base_cond: Callable[[], bool]) -> Callable[[], bool]:
+    """Wrap a screen's display condition with live pause/skip/game-mode control.
 
-    A skip request always wins immediately (even while paused), ending the current
-    screen right now. Otherwise, while paused the screen is held indefinitely --
-    base_cond (its normal timer/scroll-completion logic) is ignored entirely.
+    Game mode turning on always wins first, ending the current screen immediately so
+    control bubbles back up to render()'s top-level dispatch to the racer plugin --
+    without this, flipping game mode on wouldn't take effect until whatever's
+    currently showing would have ended on its own (up to its full timer duration).
+    A skip request wins next (even while paused), ending the current screen right
+    now. Otherwise, while paused the screen is held indefinitely -- base_cond (its
+    normal timer/scroll-completion logic) is ignored entirely.
     """
 
     def cond():
-        if control.consume_skip():
+        if data.game_mode.is_active():
+            return False
+        if data.rotation_control.consume_skip():
             LOGGER.debug("Skip consumed, ending current screen")
             return False
-        if control.is_paused():
+        if data.rotation_control.is_paused():
             return True
         return base_cond()
 
